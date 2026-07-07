@@ -1,0 +1,11 @@
+--- GitHub ---
+https://github.com/jeff79213-baba/menu-photo-calculator
+
+--- GitHub Pages ---
+https://jeff79213-baba.github.io/menu-photo-calculator/
+
+--- 本機預覽 ---
+http://localhost:3000
+
+--- 本地路徑 ---
+C:\Users\TW-10\Documents\firebase雲端資料夾\菜單拍照計算機
