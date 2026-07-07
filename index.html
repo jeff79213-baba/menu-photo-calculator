@@ -696,6 +696,7 @@
         <textarea id="geminiJsonInput" placeholder='請在 Gemini 取得 JSON 後貼在這裡&#10;&#10;格式範例：&#10;{&#10;  "title": "店名",&#10;  "subtitle": "標語",&#10;  "items": [&#10;    { "name": "商品", "price": 100, "unit": "份" }&#10;  ]&#10;}'></textarea>
         <div class="paste-actions">
           <button class="btn-primary" id="btnParseGemini">🔍 解析並編輯品項</button>
+          <button class="btn-secondary" id="btnDownloadGemini">📥 下載 JSON</button>
           <button class="btn-secondary" id="btnClearGemini">清除</button>
         </div>
       </div>
@@ -708,6 +709,7 @@
         <textarea id="directJsonInput" placeholder='請貼上 JSON 格式的菜單資料&#10;&#10;支援格式：&#10;{&#10;  "title": "店名",&#10;  "subtitle": "標語",&#10;  "items": [&#10;    { "name": "商品名", "price": 100, "unit": "份" }&#10;  ]&#10;}'></textarea>
         <div class="paste-actions">
           <button class="btn-primary" id="btnParseDirect">🔍 解析並編輯品項</button>
+          <button class="btn-secondary" id="btnDownloadDirect">📥 下載 JSON</button>
           <button class="btn-secondary" id="btnClearDirect">清除</button>
         </div>
       </div>
@@ -1471,12 +1473,29 @@ document.querySelectorAll('.import-tab').forEach(function(tab) {
   });
 });
 
+function downloadJsonText(text, filename) {
+  if (!text || !text.trim()) { showToast('沒有內容可以下載', 'info'); return; }
+  try { JSON.parse(text); } catch(e) { showToast('JSON 格式不正確，無法下載', 'error'); return; }
+  var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename || 'menu.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+  showToast('已下載 ' + a.download, 'success');
+}
+
 // Parse Gemini JSON
 document.getElementById('btnParseGemini').addEventListener('click', function() {
   var text = document.getElementById('geminiJsonInput').value.trim();
   if (!text) { showToast('請先貼上 Gemini 輸出的 JSON', 'info'); return; }
   var data = parseImportJson(text);
   if (data) showImportPreview(data);
+});
+
+document.getElementById('btnDownloadGemini').addEventListener('click', function() {
+  downloadJsonText(document.getElementById('geminiJsonInput').value, 'gemini-menu.json');
 });
 
 document.getElementById('btnClearGemini').addEventListener('click', function() {
@@ -1490,6 +1509,10 @@ document.getElementById('btnParseDirect').addEventListener('click', function() {
   if (!text) { showToast('請先貼上 JSON', 'info'); return; }
   var data = parseImportJson(text);
   if (data) showImportPreview(data);
+});
+
+document.getElementById('btnDownloadDirect').addEventListener('click', function() {
+  downloadJsonText(document.getElementById('directJsonInput').value, 'menu-data.json');
 });
 
 document.getElementById('btnClearDirect').addEventListener('click', function() {
