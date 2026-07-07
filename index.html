@@ -442,6 +442,13 @@
   }
   .btn-start:hover { opacity: .9; }
   .btn-start:active { transform: scale(.97); }
+  .btn-start-top {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    font-size: 14px;
+    border-radius: 10px;
+    width: auto;
+  }
 
   /* ===== SETTINGS (partial, full in inline) ===== */
   .settings-container { max-width: 500px; margin: 0 auto; padding: 20px 16px 40px; }
@@ -734,6 +741,7 @@
     <div class="page-header">
       <button class="back-btn-header" id="btnEditorBack">‹</button>
       <h2>編輯品項</h2>
+      <button class="btn-start btn-start-top" id="btnStartOrderTop">🧮 開始點餐</button>
     </div>
 
     <div class="editor-section">
@@ -1597,8 +1605,7 @@ document.getElementById('btnEditorBack').addEventListener('click', function() {
   showView('viewImport');
 });
 
-// Editor → Start Order (save config, go to calculator)
-document.getElementById('btnStartOrder').addEventListener('click', function() {
+function doStartOrder() {
   var data = gatherEditorData();
   if (!data) return;
   config.title = data.title;
@@ -1609,7 +1616,10 @@ document.getElementById('btnStartOrder').addEventListener('click', function() {
   showView('viewCalculator');
   renderMainView();
   showToast('已載入 ' + data.items.length + ' 項品項，開始點餐！', 'success');
-});
+}
+
+document.getElementById('btnStartOrder').addEventListener('click', doStartOrder);
+document.getElementById('btnStartOrderTop').addEventListener('click', doStartOrder);
 
 // ================================================================
 // SETTINGS VIEW
