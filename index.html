@@ -1760,10 +1760,12 @@ function gatherSettingsFromForm() {
   };
 }
 
-function importConfig(raw) {
+function importConfig(raw, stayInSettings) {
   var items = normalizeItems(raw);
   if (!items || items.length === 0) { showToast('無法辨識 JSON 中的品項資料', 'error'); return false; }
   var cfg = JSON.parse(JSON.stringify(config));
+  if (raw.title) cfg.title = raw.title;
+  if (raw.subtitle) cfg.subtitle = raw.subtitle;
   cfg.items = items;
   if (!cfg.colors) cfg.colors = {};
   var c = DEFAULT_CONFIG.colors;
@@ -1771,8 +1773,12 @@ function importConfig(raw) {
   cfg.items.forEach(function(item, i) { if (!item.id) item.id = generateId(); });
   itemIdCounter = cfg.items.length;
   saveConfig(cfg);
-  showView('viewCalculator');
-  renderMainView();
+  if (stayInSettings) {
+    showToast('已匯入 ' + items.length + ' 項品項，title/subtitle 已更新', 'success');
+  } else {
+    showView('viewCalculator');
+    renderMainView();
+  }
   return true;
 }
 
@@ -1825,8 +1831,9 @@ document.getElementById('importPasteBtn').addEventListener('click', function() {
   if (!text) { showToast('請先貼上 JSON 內容', 'info'); return; }
   try {
     var raw = JSON.parse(text);
-    if (importConfig(raw)) {
+    if (importConfig(raw, true /* stayInSettings */)) {
       document.getElementById('jsonPasteInput').value = '';
+      renderSettingsView();
     }
   } catch(err) { showToast('JSON 解析失敗：' + err.message, 'error'); }
 });
