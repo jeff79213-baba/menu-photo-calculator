@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 智慧菜單辨識系統 (SPA)</title>
+  
+  <!-- 引入 Google Fonts (Plus Jakarta Sans + Noto Sans TC) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- 引入 Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Tailwind 額外設定與動畫 -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Noto Sans TC"', 'sans-serif'],
+          },
+          colors: {
+            slate: {
+              950: '#030712',
+            }
+          },
+          animation: {
+            'shimmer': 'shimmer 2.5s infinite linear',
+            'pulse-fast': 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'scan': 'scan 3s ease-in-out infinite',
+          },
+          keyframes: {
+            shimmer: {
+              '0%': { backgroundPosition: '-200% 0' },
+              '100%': { backgroundPosition: '200% 0' },
+            },
+            scan: {
+              '0%, 100%': { top: '0%' },
+              '50%': { top: '100%' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- 引入 Lucide 圖標庫 -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 平滑捲動與微調樣式 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .custom-shadow {
+      box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.15), 0 0 15px -5px rgba(99, 102, 241, 0.1);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen selection:bg-indigo-500/30 selection:text-indigo-200">
+
+  <!-- 浮動通知容器 (Toast) -->
+  <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none max-w-sm w-full"></div>
+
+  <!-- 背景科技光暈效果 -->
+  <div class="fixed top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+  <div class="fixed bottom-10 right-1/4 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+  <div class="max-w-7xl mx-auto px-4 py-8 relative z-10">
+    
+    <!-- 頂部 Header -->
+    <header class="flex flex-col md:flex-row items-center justify-between gap-4 mb-10 border-b border-slate-800/80 pb-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i data-lucide="camera" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400">
+            Smart Menu Parser
+          </h1>
+          <p class="text-xs text-slate-400 mt-0.5">拍照菜單轉結構化 JSON 單頁應用程式</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-800/80 px-3.5 py-1.5 rounded-full text-xs text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Gemini 2.5 Flash 直連技術</span>
+      </div>
+    </header>
+
+    <!-- 主板塊：網頁雙欄佈局 -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- 左側欄：輸入與設定區 (佔 5 欄) -->
+      <section class="lg:col-span-5 flex flex-col gap-6">
+        
+        <!-- 卡片 1：影像來源上傳與相機 -->
+        <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-2xl p-6 custom-shadow">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-slate-300 flex items-center gap-2">
+              <i data-lucide="image" class="w-4 h-4 text-indigo-400"></i>
+              步驟 1：匯入菜單影像
+            </h2>
+            <button id="clear-btn" class="hidden text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              清除重新上傳
+            </button>
+          </div>
+
+          <!-- 上傳拖曳區 -->
+          <div id="drop-zone" class="relative group border-2 border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-8 flex flex-col items-center justify-center transition-all duration-300 bg-slate-950/40 hover:bg-indigo-950/10 cursor-pointer overflow-hidden min-h-[220px]">
+            <input type="file" id="file-input" accept="image/*" capture="environment" class="hidden">
+            
+            <!-- 預設提示內容 -->
+            <div id="upload-prompt" class="text-center transition-all duration-300 group-hover:scale-105">
+              <div class="w-14 h-14 rounded-full bg-slate-800/60 group-hover:bg-indigo-500/10 flex items-center justify-center mx-auto mb-4 transition-colors">
+                <i data-lucide="upload-cloud" class="w-7 h-7 text-slate-400 group-hover:text-indigo-400 transition-colors"></i>
+              </div>
+              <p class="text-sm font-medium text-slate-300">拖曳圖片至此，或 <span class="text-indigo-400 font-semibold underline underline-offset-4">點擊選擇檔案</span></p>
+              <p class="text-xs text-slate-500 mt-2">支援行動裝置啟動相機拍照 (JPG/PNG/WEBP)</p>
+            </div>
+
+            <!-- 圖片即時預覽 -->
+            <div id="preview-container" class="hidden absolute inset-0 w-full h-full bg-slate-950">
+              <img id="image-preview" src="" alt="Menu preview" class="w-full h-full object-contain">
+              <!-- 科技感掃描線效果 (辨識中呈現) -->
+              <div id="scan-line" class="hidden absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-indigo-400 to-transparent shadow-[0_0_15px_#6366f1] animate-scan"></div>
+              <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity flex items-end justify-center p-4">
+                <span class="text-xs text-slate-300 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full backdrop-blur">點擊或拖曳更換圖片</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 2：手動自訂欄位 -->
+        <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-2xl p-6 custom-shadow">
+          <h2 class="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-4">
+            <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i>
+            步驟 2：自訂資訊 (無偵測到時採用之預設)
+          </h2>
+          
+          <div class="flex flex-col gap-4">
+            <div>
+              <label for="input-title" class="block text-xs font-medium text-slate-400 mb-1.5">菜單標題 (店名預設值)</label>
+              <div class="relative">
+                <input type="text" id="input-title" value="雯雯小吃" placeholder="例如：好味道精緻麵館" class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 transition-all">
+                <div class="absolute right-3 top-2.5 text-[10px] text-slate-500 flex items-center gap-1">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400/70 animate-pulse"></i> AI 優先覆寫
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label for="input-subtitle" class="block text-xs font-medium text-slate-400 mb-1.5">菜單副標題 (標語預設值)</label>
+              <input type="text" id="input-subtitle" value="吃益生菌提升免疫力" placeholder="例如：美味傳承二十年" class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 transition-all">
+            </div>
+          </div>
+        </div>
+
+        <!-- 開始轉換大按鈕 -->
+        <button id="recognize-btn" disabled class="w-full py-4 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-3 transition-all duration-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-400 active:scale-[0.98] shadow-indigo-500/10">
+          <i data-lucide="wand-2" class="w-4 h-4"></i>
+          <span>開始 AI 智慧辨識</span>
+        </button>
+
+      </section>
+
+      <!-- 右側欄：輸出與操作區 (佔 7 欄) -->
+      <section class="lg:col-span-7 flex flex-col gap-6">
+        
+        <!-- 卡片 3：核心展示區 (Tabs + 工具) -->
+        <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-2xl p-6 custom-shadow flex flex-col min-h-[500px]">
+          
+          <!-- Tabs 頂部控制列 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 mb-4 gap-4">
+            <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800/80">
+              <button id="tab-json" class="flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-white bg-indigo-600/90 shadow-sm shadow-indigo-500/10">
+                <i data-lucide="code-2" class="w-3.5 h-3.5"></i>
+                JSON 原始碼
+              </button>
+              <button id="tab-table" class="flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-slate-200">
+                <i data-lucide="table" class="w-3.5 h-3.5"></i>
+                品項預覽表
+              </button>
+            </div>
+
+            <!-- 右側功能動作 -->
+            <div class="flex items-center gap-2">
+              <button id="copy-btn" disabled class="px-3.5 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:pointer-events-none active:scale-95">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                複製 JSON
+              </button>
+              <button id="download-btn" disabled class="px-3.5 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:pointer-events-none active:scale-95">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                下載檔案
+              </button>
+            </div>
+          </div>
+
+          <!-- 分頁內容容器 -->
+          <div class="flex-1 flex flex-col relative">
+            
+            <!-- 未生成狀態 Placeholder -->
+            <div id="output-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+              <div class="w-16 h-16 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-center text-slate-500 mb-4">
+                <i data-lucide="terminal" class="w-8 h-8"></i>
+              </div>
+              <h3 class="text-sm font-semibold text-slate-300">等待辨識結果</h3>
+              <p class="text-xs text-slate-500 mt-1 max-w-[280px]">請於左側上傳菜單照片，並點擊「開始辨識」按鈕，系統將自動解析出結構化資料。</p>
+            </div>
+
+            <!-- 分頁一：JSON 渲染 -->
+            <div id="content-json" class="hidden flex-1 flex-col">
+              <div class="relative flex-1 bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 overflow-auto font-mono text-xs leading-relaxed text-indigo-300 max-h-[420px]">
+                <pre class="whitespace-pre-wrap word-break-all"><code id="json-code"></code></pre>
+              </div>
+            </div>
+
+            <!-- 分頁二：精美表格渲染 -->
+            <div id="content-table" class="hidden flex-1 flex-col">
+              <div class="overflow-x-auto border border-slate-800/80 rounded-xl bg-slate-950/50 max-h-[420px]">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="border-b border-slate-800 bg-slate-900/60 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <th class="py-3 px-4">#</th>
+                      <th class="py-3 px-4">品項名稱</th>
+                      <th class="py-3 px-4 text-right">價格 (TWD)</th>
+                      <th class="py-3 px-4 text-center">單位</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-body" class="text-xs divide-y divide-slate-800/50 text-slate-300">
+                    <!-- 動態渲染品項 -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 底部資訊提示 -->
+          <div class="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between text-[11px] text-slate-500">
+            <span id="items-count-indicator">品項總數：0 項</span>
+            <span class="flex items-center gap-1">
+              <i data-lucide="info" class="w-3.5 h-3.5 text-indigo-400/60"></i>
+              手動微調左側欄位，右側資料即時同步更新
+            </span>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- 頁尾宣告 -->
+    <footer class="mt-12 text-center border-t border-slate-900 pt-6 text-[11px] text-slate-600">
+      <p>© 2026 AI Smart Menu Parser. All Rights Reserved. Powered by Gemini-2.5-Flash.</p>
+    </footer>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 全域變數與狀態管理
+    // ==========================================
+    const apiKey = "";
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'menu-parser-spa';
+    
+    // 狀態管理物件 (預設值已更新為「雯雯小吃」與「吃益生菌提升免疫力」)
+    const state = {
+      base64Image: null,
+      mimeType: null,
+      menuTitle: "雯雯小吃",
+      menuSubtitle: "吃益生菌提升免疫力",
+      parsedItems: [], // 僅存放 AI 解析出的品項陣列
+      activeTab: 'json' // 'json' | 'table'
+    };
+
+    // ==========================================
+    // 2. DOM 元素選取
+    // ==========================================
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const uploadPrompt = document.getElementById('upload-prompt');
+    const previewContainer = document.getElementById('preview-container');
+    const imagePreview = document.getElementById('image-preview');
+    const clearBtn = document.getElementById('clear-btn');
+    const recognizeBtn = document.getElementById('recognize-btn');
+    const scanLine = document.getElementById('scan-line');
+
+    const inputTitle = document.getElementById('input-title');
+    const inputSubtitle = document.getElementById('input-subtitle');
+
+    const tabJson = document.getElementById('tab-json');
+    const tabTable = document.getElementById('tab-table');
+    const contentJson = document.getElementById('content-json');
+    const contentTable = document.getElementById('content-table');
+    const outputPlaceholder = document.getElementById('output-placeholder');
+
+    const jsonCode = document.getElementById('json-code');
+    const tableBody = document.getElementById('table-body');
+    const itemsCountIndicator = document.getElementById('items-count-indicator');
+    
+    const copyBtn = document.getElementById('copy-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const toastContainer = document.getElementById('toast-container');
+
+    // ==========================================
+    // 3. 通用輔助函式：自訂 Toast 提示
+    // ==========================================
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-md transform translate-y-2 opacity-0 transition-all duration-300 pointer-events-auto text-xs ${
+        type === 'success' 
+          ? 'bg-slate-900/90 border-emerald-500/30 text-emerald-300' 
+          : type === 'error'
+          ? 'bg-slate-900/90 border-rose-500/30 text-rose-300'
+          : 'bg-slate-900/90 border-indigo-500/30 text-indigo-300'
+      }`;
+
+      const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'alert-triangle' : 'info';
+      toast.innerHTML = `
+        <i data-lucide="${icon}" class="w-4.5 h-4.5 flex-shrink-0"></i>
+        <span class="font-medium">${message}</span>
+      `;
+      
+      toastContainer.appendChild(toast);
+      lucide.createIcons();
+
+      // 進場動畫
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      // 退場自毀
+      setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 3500);
+    }
+
+    // ==========================================
+    // 4. 影像處理與上傳事件
+    // ==========================================
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-indigo-500', 'bg-indigo-950/20');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+      }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetUpload();
+    });
+
+    function handleFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('請匯入正確的影像格式檔！', 'error');
+        return;
+      }
+
+      state.mimeType = file.type;
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = () => {
+        const base64Data = reader.result.split(',')[1];
+        state.base64Image = base64Data;
+        
+        imagePreview.src = reader.result;
+        uploadPrompt.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+        clearBtn.classList.remove('hidden');
+        recognizeBtn.removeAttribute('disabled');
+        
+        showToast('影像載入完成，可以開始解析。', 'info');
+      };
+    }
+
+    function resetUpload() {
+      state.base64Image = null;
+      state.mimeType = null;
+      fileInput.value = '';
+      imagePreview.src = '';
+      uploadPrompt.classList.remove('hidden');
+      previewContainer.classList.add('hidden');
+      clearBtn.classList.add('hidden');
+      recognizeBtn.setAttribute('disabled', 'true');
+    }
+
+    // ==========================================
+    // 5. 即時雙向連動渲染機制 (雙向綁定)
+    // ==========================================
+    inputTitle.addEventListener('input', (e) => {
+      state.menuTitle = e.target.value;
+      renderOutput();
+    });
+
+    inputSubtitle.addEventListener('input', (e) => {
+      state.menuSubtitle = e.target.value;
+      renderOutput();
+    });
+
+    function renderOutput() {
+      // 組合最終呈現的 JSON 結構
+      const finalJSON = {
+        title: state.menuTitle || "",
+        subtitle: state.menuSubtitle || "",
+        items: state.parsedItems
+      };
+
+      const jsonString = JSON.stringify(finalJSON, null, 2);
+      jsonCode.textContent = jsonString;
+
+      renderTable(finalJSON.items);
+      itemsCountIndicator.textContent = `品項總數：${finalJSON.items.length} 項`;
+
+      if (state.parsedItems.length > 0) {
+        copyBtn.removeAttribute('disabled');
+        downloadBtn.removeAttribute('disabled');
+        outputPlaceholder.classList.add('hidden');
+        
+        if (state.activeTab === 'json') {
+          contentJson.classList.remove('hidden');
+          contentTable.classList.add('hidden');
+        } else {
+          contentJson.classList.add('hidden');
+          contentTable.classList.remove('hidden');
+        }
+      } else {
+        copyBtn.setAttribute('disabled', 'true');
+        downloadBtn.setAttribute('disabled', 'true');
+        outputPlaceholder.classList.remove('hidden');
+        contentJson.classList.add('hidden');
+        contentTable.classList.add('hidden');
+      }
+    }
+
+    function renderTable(items) {
+      tableBody.innerHTML = '';
+      if (!items || items.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="4" class="py-6 text-center text-slate-500">暫無品項資料</td>
+          </tr>
+        `;
+        return;
+      }
+
+      items.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-900/40 transition-colors";
+        tr.innerHTML = `
+          <td class="py-3 px-4 text-slate-500 font-mono">${index + 1}</td>
+          <td class="py-3 px-4 font-medium text-slate-200">${escapeHtml(item.name)}</td>
+          <td class="py-3 px-4 text-right text-emerald-400 font-mono font-semibold">${item.price !== undefined ? item.price : '-'}</td>
+          <td class="py-3 px-4 text-center text-slate-400">${escapeHtml(item.unit) || '<span class="text-slate-600">-</span>'}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // 防禦 XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // ==========================================
+    // 6. 分頁切換 (Tabs)
+    // ==========================================
+    tabJson.addEventListener('click', () => switchTab('json'));
+    tabTable.addEventListener('click', () => switchTab('table'));
+
+    function switchTab(tab) {
+      state.activeTab = tab;
+      if (tab === 'json') {
+        tabJson.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-white bg-indigo-600/90 shadow-sm shadow-indigo-500/10";
+        tabTable.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-slate-200";
+        
+        if (state.parsedItems.length > 0) {
+          contentJson.classList.remove('hidden');
+          contentTable.classList.add('hidden');
+        }
+      } else {
+        tabTable.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-white bg-indigo-600/90 shadow-sm shadow-indigo-500/10";
+        tabJson.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-slate-200";
+        
+        if (state.parsedItems.length > 0) {
+          contentJson.classList.add('hidden');
+          contentTable.classList.remove('hidden');
+        }
+      }
+    }
+
+    // ==========================================
+    // 7. 指數型退避重試請求與 AI 串接
+    // ==========================================
+    async function fetchWithRetry(url, options, maxRetries = 5) {
+      let delay = 1000;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const response = await fetch(url, options);
+          if (response.ok) {
+            return await response.json();
+          }
+          throw new Error(`伺服器回應錯誤狀態碼: ${response.status}`);
+        } catch (error) {
+          if (i === maxRetries - 1) {
+            throw error;
+          }
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+    }
+
+    recognizeBtn.addEventListener('click', async () => {
+      if (!state.base64Image) {
+        showToast('請先上傳圖片！', 'error');
+        return;
+      }
+
+      setLoadingState(true);
+      showToast('開始傳送 AI 多模態辨識請求，請稍候...', 'info');
+
+      // 構建 Gemini 2.5 Flash API Payload
+      const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      
+      const payload = {
+        contents: [
+          {
+            parts: [
+              { 
+                text: "請分析辨識這張菜單。請辨識店家名稱（如餐廳招牌名稱）設為 title，店家標語或副標（如菜單上的第二行宣傳文字、 slogan 或子標題）設為 subtitle。如果無法在菜單圖片中找到店家名稱或標語，請回傳空字串 \"\"。另外，請將菜單上的所有品項詳細轉換為結構化資料，存入 'items' 陣列。若品項有大小份（如大、小、中）、或是口味規格（如：原味、辣味），請務必拆分為獨立的物件。price 必須為整數數字，拒絕區間字串。unit 則是該品項的單位（如：碗、杯、份，若無則填空字串）。" 
+              },
+              {
+                inlineData: {
+                  mimeType: state.mimeType,
+                  data: state.base64Image
+                }
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              title: { 
+                type: "STRING", 
+                description: "圖片中辨識出的店家名稱/餐廳招牌 (若找不到請回傳空字串)" 
+              },
+              subtitle: { 
+                type: "STRING", 
+                description: "圖片中辨識出的店名標語、Slogan 或副標題 (若找不到請回傳空字串)" 
+              },
+              items: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    name: { 
+                      type: "STRING", 
+                      description: "品項名稱 (若有區分大小份、口味，請拆分為獨立物件)" 
+                    },
+                    price: { 
+                      type: "INTEGER", 
+                      description: "必須為整數數字，拒絕區間字串" 
+                    },
+                    unit: { 
+                      type: "STRING", 
+                      description: "單位 (如：碗、杯、份，若無則填空字串)" 
+                    }
+                  },
+                  required: ["name", "price", "unit"]
+                }
+              }
+            },
+            required: ["title", "subtitle", "items"]
+          }
+        }
+      };
+
+      try {
+        const responseData = await fetchWithRetry(apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const textResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!textResponse) {
+          throw new Error('API 回傳格式異常：未能成功提取文本內容');
+        }
+
+        const parsedResult = JSON.parse(textResponse);
+
+        // ==========================================
+        // 8. 智慧標題與副標題優先順序與 Fallback 機制 (強化連動)
+        // ==========================================
+        
+        // 處理 頁面標題 (Title)
+        if (parsedResult.title && parsedResult.title.trim() !== "") {
+          state.menuTitle = parsedResult.title.trim();
+          inputTitle.value = state.menuTitle; // 同步更新輸入框
+          inputTitle.dispatchEvent(new Event('input')); // 強制觸發雙向連動更新事件
+          showToast(`已偵測並套用店名：${state.menuTitle}`, 'success');
+        } else {
+          // 找不到則採用使用者預設值/原輸入
+          state.menuTitle = inputTitle.value || "雯雯小吃";
+          inputTitle.dispatchEvent(new Event('input')); // 確保派發事件更新
+          showToast('未偵測到店名，採用預設標題', 'info');
+        }
+
+        // 處理 副標題 (Subtitle)
+        if (parsedResult.subtitle && parsedResult.subtitle.trim() !== "") {
+          state.menuSubtitle = parsedResult.subtitle.trim();
+          inputSubtitle.value = state.menuSubtitle; // 同步更新輸入框
+          inputSubtitle.dispatchEvent(new Event('input')); // 強制觸發雙向連動更新事件
+          showToast(`已偵測並套用標語：${state.menuSubtitle}`, 'success');
+        } else {
+          // 找不到則採用使用者預設值/原輸入
+          state.menuSubtitle = inputSubtitle.value || "";
+          inputSubtitle.dispatchEvent(new Event('input')); // 確保派發事件更新
+          if (state.menuSubtitle) {
+            showToast('未偵測到標語，採用預設副標題', 'info');
+          }
+        }
+
+        // 保存解析出的品項列表
+        state.parsedItems = parsedResult.items || [];
+        
+        // 渲染結果
+        renderOutput();
+        showToast(`辨識成功！共解析出 ${state.parsedItems.length} 項品項。`, 'success');
+
+      } catch (err) {
+        console.error(err);
+        showToast(`辨識失敗: ${err.message}`, 'error');
+      } finally {
+        setLoadingState(false);
+      }
+    });
+
+    function setLoadingState(isLoading) {
+      if (isLoading) {
+        recognizeBtn.setAttribute('disabled', 'true');
+        recognizeBtn.innerHTML = `
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>多模態引擎深度分析中...</span>
+        `;
+        scanLine.classList.remove('hidden');
+      } else {
+        recognizeBtn.removeAttribute('disabled');
+        recognizeBtn.innerHTML = `
+          <i data-lucide="wand-2" class="w-4 h-4"></i>
+          <span>開始 AI 智慧辨識</span>
+        `;
+        scanLine.classList.add('hidden');
+        lucide.createIcons();
+      }
+    }
+
+    // ==========================================
+    // 9. 操作按鈕：複製與下載
+    // ==========================================
+    copyBtn.addEventListener('click', () => {
+      const jsonText = jsonCode.textContent;
+      if (!jsonText) return;
+
+      const tempTextArea = document.createElement('textarea');
+      tempTextArea.value = jsonText;
+      tempTextArea.style.position = 'fixed';
+      tempTextArea.style.opacity = '0';
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+      
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          showToast('JSON 結構已成功複製至剪貼簿！', 'success');
+        } else {
+          showToast('複製失敗，請手動選取複製。', 'error');
+        }
+      } catch (err) {
+        showToast('無法執行複製功能', 'error');
+      }
+      document.body.removeChild(tempTextArea);
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const jsonText = jsonCode.textContent;
+      if (!jsonText) return;
+
+      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8;' });
+      
+      const now = new Date();
+      const pad = (num) => String(num).padStart(2, '0');
+      const timestampStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+      
+      const fileName = `menu_structured_${timestampStr}.json`;
+
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showToast(`已成功下載：${fileName}`, 'success');
+    });
+
+    // ==========================================
+    // 10. 初始化頁面
+    // ==========================================
+    window.onload = () => {
+      lucide.createIcons();
+      resetUpload();
+    };
+  </script>
+</body>
+</html>
