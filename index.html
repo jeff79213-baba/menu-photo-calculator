@@ -956,7 +956,7 @@
 
     <div class="text-import-area">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">📋 文字匯入品項</div>
-      <div style="font-size:12px;color:#999;margin-bottom:6px;">每行一筆，格式：<code>品名-單位-價格</code>，例如 <code id="textImportExample">益生菌-盒-1980</code></div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">每行一筆，格式：<code>品名-單位-價格</code>，可加分類：<code>品名-單位-價格-分類</code>，例如 <code id="textImportExample">益生菌-盒-1980</code></div>
       <textarea id="textImportInput" placeholder="益生菌-盒-1980"></textarea>
       <div class="import-actions">
         <button class="btn-primary" id="textImportBtn">📥 匯入品項</button>
@@ -1760,6 +1760,13 @@ function gatherSettingsFromForm() {
   };
 }
 
+// Settings: Add item
+document.getElementById('addItemBtn').addEventListener('click', function() {
+  config.items.push({ id: generateId(), name: '', price: 0, unit: '份', category: '' });
+  itemIdCounter = config.items.length;
+  renderSettingsItems();
+});
+
 function importConfig(raw, stayInSettings) {
   var items = normalizeItems(raw);
   if (!items || items.length === 0) { showToast('無法辨識 JSON 中的品項資料', 'error'); return false; }
@@ -1848,11 +1855,12 @@ function parseTextItems(text) {
   var items = [];
   for (var i = 0; i < lines.length; i++) {
     var parts = lines[i].split('-').map(function(s) { return s.trim(); });
-    if (parts.length === 3) {
+    if (parts.length >= 3) {
       var name = parts[0];
       var unit = parts[1];
       var price = parseInt(parts[2].replace(/,/g, '')) || 0;
-      if (name) items.push({ id: generateId(), name: name, unit: unit || '個', price: price });
+      var category = parts.length >= 4 ? parts[3] : '';
+      if (name) items.push({ id: generateId(), name: name, unit: unit || '個', price: price, category: category });
     }
   }
   return items;
@@ -1900,10 +1908,12 @@ function updateTextImportPlaceholder() {
   if (config.items.length > 0) {
     var first = config.items[0];
     var example = first.name + '-' + first.unit + '-' + first.price;
+    if (first.category) example += '-' + first.category;
     ta.placeholder = example;
     if (exEl) exEl.textContent = example;
   } else {
     ta.placeholder = '品名-單位-價格';
+    if (exEl) exEl.textContent = '益生菌-盒-1980';
   }
 }
 
