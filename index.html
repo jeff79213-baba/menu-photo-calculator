@@ -482,6 +482,14 @@
   .move-btn:disabled { opacity: .2; cursor: default; }
   .delete-item { background: none; border: none; font-size: 22px; color: #ccc; cursor: pointer; padding: 4px 8px; }
   .delete-item:hover { color: #e85d2c; }
+  .settings-cat-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .cat-filter-btn {
+    padding: 5px 12px; border: 1px solid #ddd; border-radius: 14px; background: #f5f2ed;
+    color: var(--text-color, #3d2b1a); font-size: 12px; cursor: pointer; font-family: inherit; transition: all .2s;
+  }
+  .cat-filter-btn.active { background: var(--color-header-bg, #e85d2c); color: #fff; border-color: var(--color-header-bg, #e85d2c); }
+  .cat-filter-btn:hover { opacity: .8; }
+  .hidden-by-filter { display: none !important; }
   .settings-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
   .settings-actions button { flex: 1; min-width: 120px; padding: 12px 16px; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .2s; }
   .btn-outline { background: #fff; color: var(--color-header-bg, #e85d2c); border: 2px solid var(--color-header-bg, #e85d2c) !important; }
@@ -1044,6 +1052,7 @@ let importData = null;
 
 // Category filter state
 let selectedCategory = 'all';
+let settingsCategoryFilter = 'all';
 
 // ================================================================
 // UTILITY
@@ -1689,9 +1698,42 @@ function renderSettingsView() {
 function renderSettingsItems() {
   var container = document.getElementById('settingsItems');
   container.innerHTML = '';
+
+  // Category filter bar
+  var cats = {};
+  config.items.forEach(function(item) {
+    if (item.category && item.category.trim()) cats[item.category.trim()] = true;
+  });
+  var catList = Object.keys(cats).sort();
+  if (catList.length > 0) {
+    var filterBar = document.createElement('div');
+    filterBar.className = 'settings-cat-filter';
+    var allBtn = document.createElement('button');
+    allBtn.className = 'cat-filter-btn' + (settingsCategoryFilter === 'all' ? ' active' : '');
+    allBtn.textContent = '全部';
+    allBtn.addEventListener('click', function() {
+      settingsCategoryFilter = 'all';
+      renderSettingsItems();
+    });
+    filterBar.appendChild(allBtn);
+    catList.forEach(function(cat) {
+      var btn = document.createElement('button');
+      btn.className = 'cat-filter-btn' + (settingsCategoryFilter === cat ? ' active' : '');
+      btn.textContent = cat;
+      btn.addEventListener('click', function() {
+        settingsCategoryFilter = cat;
+        renderSettingsItems();
+      });
+      filterBar.appendChild(btn);
+    });
+    container.appendChild(filterBar);
+  }
+
   config.items.forEach(function(item, idx) {
+    var show = settingsCategoryFilter === 'all' || (item.category && item.category.trim() === settingsCategoryFilter);
     var row = document.createElement('div');
     row.className = 'settings-item-row';
+    if (!show) row.classList.add('hidden-by-filter');
     row.dataset.id = item.id;
     row.innerHTML = '<span class="item-idx">' + (idx + 1) + '</span><input class="item-name" type="text" value="' + escapeHtml(item.name) + '" placeholder="名稱"><input class="item-price" type="number" min="0" step="1" value="' + item.price + '" placeholder="價格"><input class="item-unit" type="text" value="' + escapeHtml(item.unit) + '" placeholder="單位"><input class="item-category" type="text" value="' + escapeHtml(item.category || '') + '" placeholder="分類" style="flex:0 0 56px;font-size:12px"><button class="move-btn" data-dir="up" title="上移">↑</button><button class="move-btn" data-dir="down" title="下移">↓</button><button class="delete-item" title="刪除此品項">✕</button>';
     container.appendChild(row);
