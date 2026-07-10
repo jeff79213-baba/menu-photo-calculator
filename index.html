@@ -34,6 +34,13 @@
     opacity: .85; transition: transform .2s;
   }
   .gear-btn:hover { transform: rotate(30deg); opacity: 1; }
+  .share-header-btn {
+    position: absolute; top: 12px; right: 58px;
+    background: none; border: none; font-size: 22px;
+    cursor: pointer; padding: 8px; line-height: 1;
+    opacity: .85; transition: transform .2s;
+  }
+  .share-header-btn:hover { transform: scale(1.15); opacity: 1; }
 
   .container { max-width: 420px; margin: 0 auto; padding: 20px 16px 40px; }
 
@@ -785,6 +792,7 @@
   <div class="header" id="mainHeader">
     <h1 id="mainTitle">載入中...</h1>
     <p id="mainSubtitle"></p>
+    <button class="share-header-btn" id="btnShareMenu" title="分享點餐網址">🔗</button>
     <button class="gear-btn" id="btnSettings" title="設定">⚙️</button>
   </div>
 
@@ -882,6 +890,15 @@
       <div class="form-group">
         <label for="inputCurrency">幣值符號</label>
         <input type="text" id="inputCurrency" placeholder="$" maxlength="5">
+      </div>
+    </div>
+
+    <h2>管理員設定</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="inputAdminPassword">管理員密碼</label>
+        <input type="text" id="inputAdminPassword" placeholder="請輸入密碼（預設 0000）" maxlength="10" style="width:100%;padding:10px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:15px;font-family:inherit;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a);outline:none;">
+        <div style="font-size:12px;color:#999;margin-top:4px;">點標題 5 下可解鎖設定，請自訂密碼避免被更改</div>
       </div>
     </div>
 
@@ -1033,6 +1050,7 @@ const DEFAULT_CONFIG = {
   currency: "$",
   layout: "list",
   colors: { bodyBg: "#f4f7e6", headerBg: "#b5c96a", accent: "#8aa84a", buttonBg: "#b5c96a", textColor: "#3d4a1a", cardBg: "#fff" },
+  adminPassword: "0000",
   items: [
     { id: "item1", name: "益生菌", price: 1950, unit: "盒" },
     { id: "item2", name: "995", price: 5960, unit: "盒" },
@@ -1047,6 +1065,7 @@ let config = {};
 let qtys = {};
 let itemIdCounter = 0;
 let isConsumerMode = false;
+let isAdminMode = false;
 
 // Temporary data from import
 let importData = null;
@@ -1175,14 +1194,58 @@ function renderMainView() {
   document.getElementById('mainFooter').textContent = config.footer;
   document.getElementById('resetBtn').textContent = config.resetText;
 
-  document.getElementById('btnSettings').style.display = isConsumerMode ? 'none' : '';
-  document.querySelector('.local-notice').style.display = isConsumerMode ? 'none' : '';
+  var showAdmin = isAdminMode;
+  document.getElementById('btnSettings').style.display = showAdmin ? '' : 'none';
+  document.getElementById('btnShareMenu').style.display = showAdmin ? '' : 'none';
+  document.querySelector('.local-notice').style.display = showAdmin ? '' : 'none';
 
   applyColors(config.colors);
 
   renderCategorySidebar();
   renderItems();
   updateTotal();
+}
+
+// Admin unlock: tap title 5 times
+var titleTapCount = 0;
+var titleTapTimer = null;
+
+function setupAdminUnlock() {
+  document.getElementById('mainTitle').addEventListener('click', function() {
+    titleTapCount++;
+    if (titleTapTimer) clearTimeout(titleTapTimer);
+    titleTapTimer = setTimeout(function() { titleTapCount = 0; }, 2000);
+    if (titleTapCount >= 5) {
+      titleTapCount = 0;
+      if (isConsumerMode) { showToast('無權限', 'error'); return; }
+      var pwd = prompt('請輸入管理員密碼：');
+      if (pwd !== null && pwd === (config.adminPassword || '0000')) {
+        isAdminMode = true;
+        renderMainView();
+        showToast('已切換為管理員模式', 'success');
+      } else if (pwd !== null) {
+        showToast('密碼錯誤', 'error');
+      }
+    }
+  });
+}
+
+function buildShareUrlFromConfig() {
+  var cfg = {
+    title: config.title,
+    subtitle: config.subtitle,
+    footer: config.footer,
+    totalLabel: config.totalLabel,
+    resetText: config.resetText,
+    emptyText: config.emptyText,
+    currency: config.currency,
+    layout: config.layout,
+    colors: config.colors,
+    items: config.items
+  };
+  var json = JSON.stringify(cfg);
+  var compressed = LZString.compressToEncodedURIComponent(json);
+  return window.location.origin + window.location.pathname + '#' + compressed;
 }
 
 function getCategories() {
@@ -1358,6 +1421,7 @@ function copyOrderDetails() {
 function buildShareUrl() {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return null;
+  delete cfg.adminPassword;
   var json = JSON.stringify(cfg);
   var compressed = LZString.compressToEncodedURIComponent(json);
   return window.location.origin + window.location.pathname + '#' + compressed;
@@ -1376,7 +1440,9 @@ function closeShareModal() {
 }
 
 function handleShareCopyLink() {
-  var url = buildShareUrl();
+  var url = document.getElementById('shareUrlDisplay').textContent;
+  if (!url) url = buildShareUrl();
+  if (!url) url = buildShareUrlFromConfig();
   if (!url) return;
   document.getElementById('shareUrlDisplay').textContent = url;
   copyToClipboard(url, '🔗 連結');
@@ -1390,7 +1456,9 @@ function handleShareCopyJson() {
 }
 
 function handleShareShowQR() {
-  var url = buildShareUrl();
+  var url = document.getElementById('shareUrlDisplay').textContent;
+  if (!url) url = buildShareUrl();
+  if (!url) url = buildShareUrlFromConfig();
   if (!url) return;
   document.getElementById('shareUrlDisplay').textContent = url;
   var container = document.getElementById('shareQRCode');
@@ -1559,7 +1627,7 @@ document.getElementById('btnGoDirectToCalc').addEventListener('click', function(
   config.title = importData.title || config.title;
   config.subtitle = importData.subtitle || config.subtitle;
   saveConfig(config);
-  isConsumerMode = false;
+  isAdminMode = true;
   showView('viewCalculator');
   renderMainView();
   clearImportPreview();
@@ -1660,7 +1728,7 @@ function doStartOrder() {
   config.subtitle = data.subtitle;
   config.items = data.items;
   saveConfig(config);
-  isConsumerMode = false;
+  isAdminMode = true;
   showView('viewCalculator');
   renderMainView();
   showToast('已載入 ' + data.items.length + ' 項品項，開始點餐！', 'success');
@@ -1706,6 +1774,7 @@ function renderSettingsView() {
   document.getElementById('inputColorButton').value = config.colors.buttonBg;
   document.getElementById('inputTextColor').value = config.colors.textColor;
   document.getElementById('inputCardBg').value = config.colors.cardBg || '#fff';
+  document.getElementById('inputAdminPassword').value = config.adminPassword || '';
   renderThemeSelector();
   renderSettingsItems();
   updateTextImportPlaceholder();
@@ -1814,7 +1883,8 @@ function gatherSettingsFromForm() {
       textColor: document.getElementById('inputTextColor').value,
       cardBg: document.getElementById('inputCardBg').value || '#fff'
     },
-    items: items
+    items: items,
+    adminPassword: document.getElementById('inputAdminPassword').value.trim() || '0000'
   };
 }
 
@@ -1986,6 +2056,18 @@ document.getElementById('btnSettings').addEventListener('click', function() {
   showView('viewSettings');
 });
 
+document.getElementById('btnShareMenu').addEventListener('click', function() {
+  var url = buildShareUrlFromConfig();
+  if (!url) return;
+  document.getElementById('shareUrlDisplay').textContent = url;
+  document.getElementById('shareTitle').textContent = '📤 分享「' + config.title + '」';
+  document.getElementById('shareSubtitle').textContent = '將此連結傳給客人，對方可直接點餐';
+  document.getElementById('shareQRContainer').style.display = 'none';
+  document.getElementById('shareQRCode').innerHTML = '';
+  document.getElementById('shareOverlay').style.display = 'flex';
+  copyToClipboard(url, '🔗 點餐網址');
+});
+
 document.getElementById('closeSettings').addEventListener('click', function() {
   showView('viewCalculator');
   renderMainView();
@@ -2040,6 +2122,12 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
 (function init() {
   config = loadConfig();
 
+  // Check if admin mode via URL parameter
+  var params = new URLSearchParams(location.search);
+  if (params.get('admin') === '1' || params.get('admin') === '') {
+    isAdminMode = true;
+  }
+
   // Check if shared via hash
   if (location.hash && location.hash.length > 1) {
     if (loadConfigFromHash()) {
@@ -2047,6 +2135,16 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
       renderMainView();
       return;
     }
+  }
+
+  // Setup admin unlock
+  setupAdminUnlock();
+
+  // If admin mode via URL, go straight to calculator
+  if (isAdminMode) {
+    showView('viewCalculator');
+    renderMainView();
+    return;
   }
 
   // Default: show home
