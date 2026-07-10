@@ -1217,7 +1217,6 @@ function setupAdminUnlock() {
     titleTapTimer = setTimeout(function() { titleTapCount = 0; }, 2000);
     if (titleTapCount >= 5) {
       titleTapCount = 0;
-      if (isConsumerMode) { showToast('無權限', 'error'); return; }
       var pwd = prompt('請輸入管理員密碼：');
       if (pwd !== null && pwd === (config.adminPassword || '0000')) {
         isAdminMode = true;
@@ -1474,6 +1473,7 @@ function loadConfigFromHash() {
     var json = LZString.decompressFromEncodedURIComponent(compressed);
     if (!json) return false;
     var cfg = JSON.parse(json);
+    cfg.adminPassword = config.adminPassword || '0000';
     saveConfig(cfg);
     location.hash = '';
     isConsumerMode = true;
@@ -2122,6 +2122,9 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
 (function init() {
   config = loadConfig();
 
+  // Setup admin unlock (always, even for shared links)
+  setupAdminUnlock();
+
   // Check if admin mode via URL parameter
   var params = new URLSearchParams(location.search);
   if (params.get('admin') === '1' || params.get('admin') === '') {
@@ -2136,9 +2139,6 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
       return;
     }
   }
-
-  // Setup admin unlock
-  setupAdminUnlock();
 
   // If admin mode via URL, go straight to calculator
   if (isAdminMode) {
