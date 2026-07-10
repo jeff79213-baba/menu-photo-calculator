@@ -1317,8 +1317,23 @@ function renderOrderDetail() {
 }
 
 function copyOrderDetails() {
+  var phoneSuffix = '';
+  if (confirm('要不要輸入手機末三碼？')) {
+    var input = prompt('請輸入您的手機末三碼：');
+    if (input !== null) {
+      input = input.trim();
+      if (/^\d{3}$/.test(input)) {
+        phoneSuffix = input;
+      } else if (input !== '') {
+        showToast('輸入格式錯誤，請輸入3位數字', 'error');
+      }
+    }
+  }
   var lines = [];
   lines.push('🧾 ' + config.title + ' 訂單明細');
+  if (phoneSuffix) {
+    lines.push('📱 手機末三碼: ' + phoneSuffix);
+  }
   lines.push('──────────');
   var total = 0;
   var hasItems = false;
