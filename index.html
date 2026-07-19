@@ -1046,7 +1046,9 @@ const THEMES = [
   { id: "default", name: "淺芥末綠", colors: { bodyBg: "#f4f7e6", headerBg: "#b5c96a", accent: "#8aa84a", buttonBg: "#b5c96a", textColor: "#3d4a1a", cardBg: "#fff" } },
   { id: "dark", name: "酷酷黑", colors: { bodyBg: "#121212", headerBg: "#1a1a2e", accent: "#e94560", buttonBg: "#e94560", textColor: "#e0e0e0", cardBg: "#1e1e1e" } },
   { id: "pink", name: "粉紅", colors: { bodyBg: "#fce4ec", headerBg: "#f06292", accent: "#c2185b", buttonBg: "#f06292", textColor: "#4a1a2e", cardBg: "#fff" } },
-  { id: "green", name: "蘋果綠", colors: { bodyBg: "#f1f8e9", headerBg: "#8bc34a", accent: "#33691e", buttonBg: "#8bc34a", textColor: "#1b3a0e", cardBg: "#fff" } }
+  { id: "blue", name: "冰藍", colors: { bodyBg: "#e3f2fd", headerBg: "#42a5f5", accent: "#1565c0", buttonBg: "#42a5f5", textColor: "#1a237e", cardBg: "#fff" } },
+  { id: "orange", name: "暖橘", colors: { bodyBg: "#fff3e0", headerBg: "#ff8a65", accent: "#bf360c", buttonBg: "#ff8a65", textColor: "#3e2723", cardBg: "#fff" } },
+  { id: "purple", name: "薰衣草", colors: { bodyBg: "#f3e5f5", headerBg: "#ab47bc", accent: "#6a1b9a", buttonBg: "#ab47bc", textColor: "#2a0a3a", cardBg: "#fff" } }
 ];
 
 const DEFAULT_CONFIG = {
@@ -1795,12 +1797,7 @@ function renderThemeSelector() {
     card.className = 'theme-card';
     card.innerHTML = '<span class="theme-dot" style="background:' + theme.colors.headerBg + '"></span><span class="theme-name">' + theme.name + '</span>';
     card.addEventListener('click', function() {
-      document.getElementById('inputColorBody').value = theme.colors.bodyBg;
-      document.getElementById('inputColorHeader').value = theme.colors.headerBg;
-      document.getElementById('inputColorAccent').value = theme.colors.accent;
-      document.getElementById('inputColorButton').value = theme.colors.buttonBg;
-      document.getElementById('inputTextColor').value = theme.colors.textColor;
-      document.getElementById('inputCardBg').value = theme.colors.cardBg || '#fff';
+      applyThemeColors(theme.colors);
     });
     container.appendChild(card);
   });
@@ -1822,6 +1819,7 @@ function renderSettingsView() {
   document.getElementById('inputTextColor').value = config.colors.textColor;
   document.getElementById('inputCardBg').value = config.colors.cardBg || '#fff';
   document.getElementById('inputAdminPassword').value = config.adminPassword || '';
+  applyColors(config.colors);
   renderThemeSelector();
   renderSettingsItems();
   updateTextImportPlaceholder();
@@ -1975,6 +1973,32 @@ document.getElementById('saveSettings').addEventListener('click', function() {
   showToast('設定已儲存', 'success');
 });
 
+// Live preview: apply colors immediately when color picker changes
+['inputColorBody','inputColorHeader','inputColorAccent','inputColorButton','inputTextColor','inputCardBg'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', function() {
+    var colors = {
+      bodyBg: document.getElementById('inputColorBody').value,
+      headerBg: document.getElementById('inputColorHeader').value,
+      accent: document.getElementById('inputColorAccent').value,
+      buttonBg: document.getElementById('inputColorButton').value,
+      textColor: document.getElementById('inputTextColor').value,
+      cardBg: document.getElementById('inputCardBg').value || '#fff'
+    };
+    applyColors(colors);
+  });
+});
+
+// Theme click also applies colors live
+function applyThemeColors(colors) {
+  document.getElementById('inputColorBody').value = colors.bodyBg;
+  document.getElementById('inputColorHeader').value = colors.headerBg;
+  document.getElementById('inputColorAccent').value = colors.accent;
+  document.getElementById('inputColorButton').value = colors.buttonBg;
+  document.getElementById('inputTextColor').value = colors.textColor;
+  document.getElementById('inputCardBg').value = colors.cardBg || '#fff';
+  applyColors(colors);
+}
+
 document.getElementById('resetDefaults').addEventListener('click', function() {
   saveConfig(JSON.parse(JSON.stringify(DEFAULT_CONFIG)));
   renderSettingsView();
@@ -2117,13 +2141,15 @@ document.getElementById('btnShareMenu').addEventListener('click', function() {
 });
 
 document.getElementById('closeSettings').addEventListener('click', function() {
+  var cfg = gatherSettingsFromForm();
+  if (cfg) { saveConfig(cfg); config = cfg; }
   showView('viewCalculator');
   renderMainView();
 });
 
 document.getElementById('backToCalculator').addEventListener('click', function() {
-  // Reload config in case settings were saved externally
-  config = loadConfig();
+  var cfg = gatherSettingsFromForm();
+  if (cfg) { saveConfig(cfg); config = cfg; }
   showView('viewCalculator');
   renderMainView();
 });
