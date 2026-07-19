@@ -1442,14 +1442,29 @@ function renderOrderDetail() {
   var body = document.getElementById('orderDetailBody');
   var html = '';
   var total = 0;
-  if (orderDetails.length === 0) {
-    html = '<p style="text-align:center;color:#999;padding:20px 0;">還沒有紀錄已計的品項</p>';
-  } else {
-    orderDetails.forEach(function(d, idx) {
-      var sub = d.qty * d.price;
+  var hasPending = false;
+  var hasCommitted = orderDetails.length > 0;
+  // Pending items
+  config.items.forEach(function(item) {
+    var q = qtys[item.id] || 0;
+    if (q > 0) {
+      hasPending = true;
+      var sub = q * item.price;
       total += sub;
-      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(d.name) + '</span><span class="item-qty">x ' + d.qty + '</span><span class="item-unit-sm">' + escapeHtml(d.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span><button class="sheet-item-del" data-idx="' + idx + '">✕</button></div>';
-    });
+      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(item.name) + '</span><span class="item-qty">x ' + q + '</span><span class="item-unit-sm">' + escapeHtml(item.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span></div>';
+    }
+  });
+  // Committed items
+  orderDetails.forEach(function(d, idx) {
+    var sub = d.qty * d.price;
+    total += sub;
+    html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(d.name) + '</span><span class="item-qty">x ' + d.qty + '</span><span class="item-unit-sm">' + escapeHtml(d.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span><button class="sheet-item-del" data-idx="' + idx + '">✕</button></div>';
+  });
+  if (!hasPending && !hasCommitted) {
+    html = '<p style="text-align:center;color:#999;padding:20px 0;">還沒有品項</p>';
+  } else if (hasPending && !hasCommitted) {
+    var tip = '<p style="text-align:center;color:#888;font-size:13px;padding:6px 0 12px;">當前待計品項，按「計」可分別記錄多筆</p>';
+    html = tip + html;
   }
   body.innerHTML = html;
   document.getElementById('sheetTotal').innerHTML = '<span class="label">總計 </span>' + config.currency + total;
@@ -1484,12 +1499,22 @@ function copyOrderDetails() {
   }
   lines.push('──────────');
   var total = 0;
-  if (orderDetails.length === 0) { showToast('目前沒有已計的品項', 'info'); return; }
+  // Pending items
+  config.items.forEach(function(item) {
+    var q = qtys[item.id] || 0;
+    if (q > 0) {
+      var sub = q * item.price;
+      total += sub;
+      lines.push(item.name + ' x ' + q + ' ' + item.unit + ' = ' + config.currency + sub);
+    }
+  });
+  // Committed items
   orderDetails.forEach(function(d) {
     var sub = d.qty * d.price;
     total += sub;
     lines.push(d.name + ' x ' + d.qty + ' ' + d.unit + ' = ' + config.currency + sub);
   });
+  if (total === 0) { showToast('目前還沒有任何品項', 'info'); return; }
   lines.push('──────────');
   lines.push('💰 總計: ' + config.currency + total);
   copyToClipboard(lines.join('\n'), '📋 明細');
@@ -2311,15 +2336,17 @@ document.getElementById('resetBtn').addEventListener('click', function() {
 
 document.getElementById('copyDetailBtn').addEventListener('click', copyOrderDetails);
 document.getElementById('clickDetailBtn').addEventListener('click', function() {
-  if (orderDetails.length > 0) openOrderDetail();
-  else showToast('還沒有已計的品項，請先按「計」', 'info');
+  var hasAny = orderDetails.length > 0 || config.items.some(function(itm) { return (qtys[itm.id] || 0) > 0; });
+  if (hasAny) openOrderDetail();
+  else showToast('還沒有任何品項', 'info');
 });
 document.getElementById('closeDetailBtn').addEventListener('click', closeOrderDetail);
 
 // Click total bar to open order detail
 document.querySelector('.total-bar').addEventListener('click', function(e) {
   if (e.target.closest('.total-bar-link')) return;
-  if (orderDetails.length > 0) openOrderDetail();
+  var hasAny = orderDetails.length > 0 || config.items.some(function(itm) { return (qtys[itm.id] || 0) > 0; });
+  if (hasAny) openOrderDetail();
 });
 
 // Share modal
