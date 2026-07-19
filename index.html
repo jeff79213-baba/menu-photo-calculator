@@ -2011,7 +2011,10 @@ document.getElementById('downloadConfig').addEventListener('click', function() {
   var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url;   a.download = 'menu-config.json';
+  a.href = url;   var now = new Date();
+  var ds = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+  var ts = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+  a.download = 'Menu-' + ds + '-' + ts + '.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 });
