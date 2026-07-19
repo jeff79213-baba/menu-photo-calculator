@@ -1584,32 +1584,22 @@ function generateShortUrl(customCode) {
   var docId = customCode + '-' + random;
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
-  // Delete all old docs with same customCode first
-  fdb.collection('shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
-    var batch = fdb.batch();
-    snapshot.forEach(function(doc) { batch.delete(doc.ref); });
-    return batch.commit();
-  }).catch(function(err) {
-    console.warn('清理舊短網址失敗（繼續建立新網址）:', err.message);
-  }).then(function() {
-    // Save new document
-    return fdb.collection('shortlinks').doc(docId).set({
-      title: cfg.title,
-      subtitle: cfg.subtitle,
-      footer: cfg.footer,
-      totalLabel: cfg.totalLabel,
-      resetText: cfg.resetText,
-      emptyText: cfg.emptyText,
-      currency: cfg.currency,
-      layout: cfg.layout,
-      colors: cfg.colors,
-      customCode: customCode,
-      randomCode: random,
-      items: cfg.items.map(function(item) {
-        return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
-      }),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+  fdb.collection('shortlinks').doc(docId).set({
+    title: cfg.title,
+    subtitle: cfg.subtitle,
+    footer: cfg.footer,
+    totalLabel: cfg.totalLabel,
+    resetText: cfg.resetText,
+    emptyText: cfg.emptyText,
+    currency: cfg.currency,
+    layout: cfg.layout,
+    colors: cfg.colors,
+    customCode: customCode,
+    randomCode: random,
+    items: cfg.items.map(function(item) {
+      return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
+    }),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() {
     var url = window.location.origin + window.location.pathname + '?s=' + docId;
     document.getElementById('shareUrlDisplay').textContent = url;
