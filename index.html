@@ -2104,24 +2104,13 @@ function renderSettingsView() {
   document.getElementById('inputCardBg').value = config.colors.cardBg || '#fff';
   document.getElementById('inputAdminPassword').value = config.adminPassword || '';
   document.getElementById('customCode').value = config.customCode || '';
-  // Lock customCode field if already set for this shop
-  var codeInput = document.getElementById('customCode');
-  if (config.customCode) {
-    codeInput.disabled = true;
-    codeInput.style.background = '#f0ede8';
-    codeInput.title = '此序號已鎖定，無法更改';
-  } else {
-    codeInput.disabled = false;
-    codeInput.style.background = '';
-    codeInput.title = '';
-  }
   applyColors(config.colors);
   renderThemeSelector();
   renderSettingsItems();
   updateTextImportPlaceholder();
-  // Lock customCode field if already set for this shop
+  // Lock customCode only for consumer-loaded pages (shared URL)
   var codeInput = document.getElementById('customCode');
-  if (config.customCode) {
+  if (isConsumerMode && config.customCode) {
     codeInput.disabled = true;
     codeInput.style.background = '#f0ede8';
     codeInput.title = '此序號已鎖定，無法更改';
