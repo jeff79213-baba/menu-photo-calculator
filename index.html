@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>AI 菜單辨識計算機</title>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
   body {
@@ -812,7 +814,6 @@
         <span class="total-bar-amount" id="totalAmount">$0</span>
         <span style="flex:1"></span>
         <button class="total-bar-link" id="clickDetailBtn">📋 明細</button>
-        <button class="total-bar-link" id="copyDetailBtn">📋 複製</button>
       </div>
       <div class="total-bar-order" id="orderSummary">還沒有點餐喔</div>
     </div>
@@ -999,8 +1000,13 @@
       </div>
     </div>
 
-    <div class="settings-actions" style="margin-top:16px">
-      <button class="btn-primary" id="shareConfig">📤 分享菜單</button>
+    <div class="share-code-section">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🔗 短網址分享</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">輸入自訂碼（4~6 位英數字），方便記憶與辨識</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input type="text" id="customCode" placeholder="例如：mamas" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+        <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 分享菜單</button>
+      </div>
     </div>
 
     <button class="back-btn" id="backToCalculator">← 返回計算機</button>
@@ -1062,12 +1068,26 @@ const DEFAULT_CONFIG = {
   layout: "list",
   colors: { bodyBg: "#f4f7e6", headerBg: "#b5c96a", accent: "#8aa84a", buttonBg: "#b5c96a", textColor: "#3d4a1a", cardBg: "#fff" },
   adminPassword: "0000",
+  customCode: "",
   items: [
     { id: "item1", name: "益生菌", price: 1950, unit: "盒" },
     { id: "item2", name: "995", price: 5960, unit: "盒" },
     { id: "item3", name: "樟芝益", price: 5960, unit: "盒" }
   ]
 };
+
+// ================================================================
+// FIREBASE INIT
+// ================================================================
+firebase.initializeApp({
+  apiKey: "AIzaSyD3quPJCOUoUH_Um5UceWXYuUXfRpJEuyo",
+  authDomain: "opencode-sk.firebaseapp.com",
+  projectId: "opencode-sk",
+  storageBucket: "opencode-sk.firebasestorage.app",
+  messagingSenderId: "741268730945",
+  appId: "1:741268730945:web:503cf0dfab0e9100b042c0"
+});
+var fdb = firebase.firestore();
 
 // ================================================================
 // STATE
@@ -1509,6 +1529,83 @@ function openShareModal() {
   document.getElementById('shareUrlDisplay').textContent = '';
   document.getElementById('shareQRContainer').style.display = 'none';
   document.getElementById('shareQRCode').innerHTML = '';
+  // If custom code is set, try to generate short URL
+  var code = config.customCode || document.getElementById('customCode').value.trim().toLowerCase();
+  if (code) {
+    generateShortUrl(code);
+  }
+}
+
+function generateRandomCode() {
+  var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  var result = '';
+  for (var i = 0; i < 8; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+  return result;
+}
+
+function generateShortUrl(customCode) {
+  var random = generateRandomCode();
+  var docId = customCode + '-' + random;
+  var cfg = gatherSettingsFromForm();
+  if (!cfg) return;
+  // Save minimal data to Firestore
+  fdb.collection('shortlinks').doc(docId).set({
+    title: cfg.title,
+    subtitle: cfg.subtitle,
+    footer: cfg.footer,
+    totalLabel: cfg.totalLabel,
+    resetText: cfg.resetText,
+    emptyText: cfg.emptyText,
+    currency: cfg.currency,
+    layout: cfg.layout,
+    colors: cfg.colors,
+    customCode: customCode,
+    randomCode: random,
+    items: cfg.items.map(function(item) {
+      return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
+    }),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    var url = window.location.origin + window.location.pathname + '?s=' + docId;
+    document.getElementById('shareUrlDisplay').textContent = url;
+    showToast('短網址已產生！', 'success');
+  }).catch(function(err) {
+    showToast('上傳失敗：' + err.message, 'error');
+  });
+}
+
+// Load config from short code (?s=xxx)
+function loadConfigFromShortCode(code) {
+  showToast('正在載入共享菜單…', 'info');
+  fdb.collection('shortlinks').doc(code).get().then(function(doc) {
+    if (!doc.exists) {
+      showToast('找不到此短網址的資料', 'error');
+      return;
+    }
+    var data = doc.data();
+    var cfg = {
+      title: data.title || '',
+      subtitle: data.subtitle || '',
+      footer: data.footer || '',
+      totalLabel: data.totalLabel || '總金額',
+      resetText: data.resetText || '全部歸零',
+      emptyText: data.emptyText || '還沒有點餐喔',
+      currency: data.currency || '$',
+      layout: data.layout || 'list',
+      colors: data.colors || DEFAULT_CONFIG.colors,
+      items: data.items || []
+    };
+    cfg.adminPassword = config.adminPassword || '0000';
+    cfg.customCode = data.customCode || '';
+    cfg.items.forEach(function(item) { if (!item.id) item.id = generateId(); });
+    saveConfig(cfg);
+    resetQtys();
+    isConsumerMode = true;
+    showView('viewCalculator');
+    renderMainView();
+  }).catch(function(err) {
+    showToast('讀取失敗：' + err.message, 'error');
+  });
 }
 
 function closeShareModal() {
@@ -1516,8 +1613,29 @@ function closeShareModal() {
 }
 
 function handleShareCopyLink() {
-  var url = document.getElementById('shareUrlDisplay').textContent;
-  if (!url) url = buildShareUrl();
+  var urlDisplay = document.getElementById('shareUrlDisplay');
+  var url = urlDisplay.textContent;
+  if (!url) {
+    // Try short URL first if custom code exists
+    var code = config.customCode || document.getElementById('customCode').value.trim().toLowerCase();
+    if (code) {
+      generateShortUrl(code);
+      // Wait briefly for Firestore, then retry
+      setTimeout(function() {
+        var u = urlDisplay.textContent;
+        if (u) { copyToClipboard(u, '🔗 連結'); }
+        else { fallbackShareLink(); }
+      }, 1500);
+      return;
+    }
+    fallbackShareLink();
+  } else {
+    copyToClipboard(url, '🔗 連結');
+  }
+}
+
+function fallbackShareLink() {
+  var url = buildShareUrl();
   if (!url) url = buildShareUrlFromConfig();
   if (!url) return;
   document.getElementById('shareUrlDisplay').textContent = url;
@@ -1532,10 +1650,26 @@ function handleShareCopyJson() {
 }
 
 function handleShareShowQR() {
-  var url = document.getElementById('shareUrlDisplay').textContent;
-  if (!url) url = buildShareUrl();
-  if (!url) url = buildShareUrlFromConfig();
-  if (!url) return;
+  var urlDisplay = document.getElementById('shareUrlDisplay');
+  var url = urlDisplay.textContent;
+  if (!url) {
+    var code = config.customCode || document.getElementById('customCode').value.trim().toLowerCase();
+    if (code) {
+      generateShortUrl(code);
+      setTimeout(function() {
+        var u = urlDisplay.textContent;
+        if (u) showQRCode(u);
+        else showQRCode(buildShareUrl() || buildShareUrlFromConfig());
+      }, 1500);
+      return;
+    }
+    url = buildShareUrl();
+    if (!url) url = buildShareUrlFromConfig();
+  }
+  if (url) showQRCode(url);
+}
+
+function showQRCode(url) {
   document.getElementById('shareUrlDisplay').textContent = url;
   var container = document.getElementById('shareQRCode');
   container.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url) + '" alt="QR Code">';
@@ -1850,6 +1984,7 @@ function renderSettingsView() {
   document.getElementById('inputTextColor').value = config.colors.textColor;
   document.getElementById('inputCardBg').value = config.colors.cardBg || '#fff';
   document.getElementById('inputAdminPassword').value = config.adminPassword || '';
+  document.getElementById('customCode').value = config.customCode || '';
   applyColors(config.colors);
   renderThemeSelector();
   renderSettingsItems();
@@ -1960,7 +2095,8 @@ function gatherSettingsFromForm() {
       cardBg: document.getElementById('inputCardBg').value || '#fff'
     },
     items: items,
-    adminPassword: document.getElementById('inputAdminPassword').value.trim() || '0000'
+    adminPassword: document.getElementById('inputAdminPassword').value.trim() || '0000',
+    customCode: document.getElementById('customCode').value.trim().toLowerCase() || ''
   };
 }
 
@@ -2163,15 +2299,7 @@ document.getElementById('btnSettings').addEventListener('click', function() {
 });
 
 document.getElementById('btnShareMenu').addEventListener('click', function() {
-  var url = buildShareUrlFromConfig();
-  if (!url) return;
-  document.getElementById('shareUrlDisplay').textContent = url;
-  document.getElementById('shareTitle').textContent = '📤 分享「' + config.title + '」';
-  document.getElementById('shareSubtitle').textContent = '將此連結傳給客人，對方可直接點餐';
-  document.getElementById('shareQRContainer').style.display = 'none';
-  document.getElementById('shareQRCode').innerHTML = '';
-  document.getElementById('shareOverlay').style.display = 'flex';
-  copyToClipboard(url, '🔗 點餐網址');
+  openShareModal();
 });
 
 document.getElementById('closeSettings').addEventListener('click', function() {
@@ -2193,7 +2321,6 @@ document.getElementById('resetBtn').addEventListener('click', function() {
   updateTotal();
 });
 
-document.getElementById('copyDetailBtn').addEventListener('click', copyOrderDetails);
 document.getElementById('clickDetailBtn').addEventListener('click', function() {
   if (orderDetails.length > 0) openOrderDetail();
   else showToast('還沒有已計的品項，請先按「計」', 'info');
@@ -2233,6 +2360,15 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
   var params = new URLSearchParams(location.search);
   if (params.get('admin') === '1' || params.get('admin') === '') {
     isAdminMode = true;
+  }
+
+  // Check if shared via short code (?s=xxx)
+  var shortCode = params.get('s');
+  if (shortCode) {
+    document.title = '載入共享菜單…';
+    showView('viewCalculator');
+    loadConfigFromShortCode(shortCode);
+    return;
   }
 
   // Check if shared via hash
