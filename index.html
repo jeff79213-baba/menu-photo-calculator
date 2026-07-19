@@ -36,13 +36,6 @@
     opacity: .85; transition: transform .2s;
   }
   .gear-btn:hover { transform: rotate(30deg); opacity: 1; }
-  .share-header-btn {
-    position: absolute; top: 12px; right: 58px;
-    background: none; border: none; font-size: 22px;
-    cursor: pointer; padding: 8px; line-height: 1;
-    opacity: .85; transition: transform .2s;
-  }
-  .share-header-btn:hover { transform: scale(1.15); opacity: 1; }
 
   .container { max-width: 420px; margin: 0 auto; padding: 20px 16px 40px; }
 
@@ -803,7 +796,6 @@
   <div class="header" id="mainHeader">
     <h1 id="mainTitle">載入中...</h1>
     <p id="mainSubtitle"></p>
-    <button class="share-header-btn" id="btnShareMenu" title="分享點餐網址">🔗</button>
     <button class="gear-btn" id="btnSettings" title="設定">⚙️</button>
   </div>
 
@@ -814,6 +806,7 @@
         <span class="total-bar-amount" id="totalAmount">$0</span>
         <span style="flex:1"></span>
         <button class="total-bar-link" id="clickDetailBtn">📋 明細</button>
+        <button class="total-bar-link" id="copyDetailBtn">📋 複製</button>
       </div>
       <div class="total-bar-order" id="orderSummary">還沒有點餐喔</div>
     </div>
@@ -1229,7 +1222,6 @@ function renderMainView() {
 
   var showAdmin = isAdminMode;
   document.getElementById('btnSettings').style.display = showAdmin ? '' : 'none';
-  document.getElementById('btnShareMenu').style.display = showAdmin ? '' : 'none';
   document.querySelector('.local-notice').style.display = showAdmin ? '' : 'none';
 
   applyColors(config.colors);
@@ -2298,10 +2290,6 @@ document.getElementById('btnSettings').addEventListener('click', function() {
   showView('viewSettings');
 });
 
-document.getElementById('btnShareMenu').addEventListener('click', function() {
-  openShareModal();
-});
-
 document.getElementById('closeSettings').addEventListener('click', function() {
   var cfg = gatherSettingsFromForm();
   if (cfg) { saveConfig(cfg); config = cfg; }
@@ -2321,6 +2309,7 @@ document.getElementById('resetBtn').addEventListener('click', function() {
   updateTotal();
 });
 
+document.getElementById('copyDetailBtn').addEventListener('click', copyOrderDetails);
 document.getElementById('clickDetailBtn').addEventListener('click', function() {
   if (orderDetails.length > 0) openOrderDetail();
   else showToast('還沒有已計的品項，請先按「計」', 'info');
