@@ -1752,6 +1752,7 @@ document.getElementById('btnGoImport').addEventListener('click', function() {
 
 // Home → Calculator
 document.getElementById('btnGoCalculator').addEventListener('click', function() {
+  isAdminMode = true;
   showView('viewCalculator');
   renderMainView();
 });
