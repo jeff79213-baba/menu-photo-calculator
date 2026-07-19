@@ -2139,13 +2139,16 @@ function gatherSettingsFromForm() {
 
 // Settings: Add item
 document.getElementById('addItemBtn').addEventListener('click', function() {
-  // Save current form edits first, then add 5 blank rows
-  var current = gatherSettingsFromForm();
-  if (current) {
-    config.items = current.items;
-    config.customCode = current.customCode;
-    config.adminPassword = current.adminPassword;
-  }
+  // Read ALL rows from DOM (including blanks) to preserve existing edits
+  var items = [];
+  document.querySelectorAll('#settingsItems .settings-item-row').forEach(function(row) {
+    var name = row.querySelector('.item-name').value.trim();
+    var price = parseFloat(row.querySelector('.item-price').value) || 0;
+    var unit = row.querySelector('.item-unit').value.trim();
+    var category = row.querySelector('.item-category').value.trim();
+    items.push({ id: row.dataset.id || generateId(), name: name, price: Math.max(0, price), unit: unit || '個', category: category });
+  });
+  config.items = items;
   config.items.push({ id: generateId(), name: '', price: 0, unit: '份', category: '' });
   itemIdCounter = config.items.length;
   renderSettingsItems();
