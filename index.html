@@ -2148,8 +2148,9 @@ function importConfig(raw, stayInSettings) {
   var items = normalizeItems(raw);
   if (!items || items.length === 0) { showToast('無法辨識 JSON 中的品項資料', 'error'); return false; }
   var cfg = JSON.parse(JSON.stringify(config));
-  if (raw.title) cfg.title = raw.title;
-  if (raw.subtitle) cfg.subtitle = raw.subtitle;
+  // Merge all fields from imported data
+  var importFields = ['title','subtitle','footer','totalLabel','resetText','emptyText','currency','layout','colors','adminPassword','customCode'];
+  importFields.forEach(function(k) { if (raw[k] !== undefined && raw[k] !== null) cfg[k] = raw[k]; });
   cfg.items = items;
   if (!cfg.colors) cfg.colors = {};
   var c = DEFAULT_CONFIG.colors;
@@ -2212,7 +2213,10 @@ document.getElementById('resetDefaults').addEventListener('click', function() {
 document.getElementById('downloadConfig').addEventListener('click', function() {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
-  var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  // Merge with current config to ensure no fields are missing
+  var full = JSON.parse(JSON.stringify(config));
+  for (var k in cfg) full[k] = cfg[k];
+  var blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;   var now = new Date();
