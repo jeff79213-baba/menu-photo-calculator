@@ -998,11 +998,22 @@
       </div>
     </div>
 
+    <div class="store-section">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🏪 商店管理</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">建立商店序號與店家名稱，每個序號對應一家店</div>
+      <div id="storeList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
+      </div>
+    </div>
+
     <div class="share-code-section">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🔗 短網址分享</div>
-      <div style="font-size:12px;color:#999;margin-bottom:6px;">輸入自訂碼（4~6 位英數字），方便記憶與辨識</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">選取商店序號產生專屬網址，序號一經設定無法更改</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <input type="text" id="customCode" placeholder="例如：mamas" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+        <input type="text" id="customCode" placeholder="請先在上方建立商店序號" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#f5f2ed">
         <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 分享菜單</button>
       </div>
     </div>
@@ -2012,6 +2023,42 @@ function renderThemeSelector() {
   });
 }
 
+function loadStoreCodes() {
+  var list = document.getElementById('storeList');
+  if (!list) return;
+  fdb.collection('store-codes').orderBy('createdAt').get().then(function(snapshot) {
+    list.innerHTML = '';
+    snapshot.forEach(function(doc) {
+      var d = doc.data();
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:#f9f7f4;margin-bottom:4px;font-size:13px';
+      row.innerHTML = '<span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + '</span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button>';
+      list.appendChild(row);
+      row.querySelector('.del-store-btn').addEventListener('click', function() {
+        if (confirm('確定刪除序號「' + doc.id + '」？此動作無法復原。')) {
+          fdb.collection('store-codes').doc(doc.id).delete().then(function() { loadStoreCodes(); });
+        }
+      });
+    });
+  }).catch(function(err) { console.warn('讀取商店列表失敗:', err.message); });
+}
+
+document.getElementById('addStoreBtn').addEventListener('click', function() {
+  var code = document.getElementById('storeCodeInput').value.trim().toLowerCase();
+  var name = document.getElementById('storeNameInput').value.trim();
+  if (!code || code.length < 4) { showToast('序號至少 4 碼', 'info'); return; }
+  if (!name) { showToast('請輸入店家名稱', 'info'); return; }
+  document.getElementById('storeCodeInput').value = '';
+  document.getElementById('storeNameInput').value = '';
+  fdb.collection('store-codes').doc(code).set({
+    shopName: name,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    showToast('已建立序號 ' + code, 'success');
+    loadStoreCodes();
+  }).catch(function(err) { showToast('建立失敗：' + err.message, 'error'); });
+});
+
 function renderSettingsView() {
   document.getElementById('inputTitle').value = config.title;
   document.getElementById('inputSubtitle').value = config.subtitle;
@@ -2029,10 +2076,24 @@ function renderSettingsView() {
   document.getElementById('inputCardBg').value = config.colors.cardBg || '#fff';
   document.getElementById('inputAdminPassword').value = config.adminPassword || '';
   document.getElementById('customCode').value = config.customCode || '';
+  // Lock customCode field if already set for this shop
+  var codeInput = document.getElementById('customCode');
+  if (config.customCode) {
+    codeInput.disabled = true;
+    codeInput.style.background = '#f0ede8';
+    codeInput.title = '此序號已鎖定，無法更改';
+  } else {
+    codeInput.disabled = false;
+    codeInput.style.background = '';
+    codeInput.title = '';
+  }
   applyColors(config.colors);
   renderThemeSelector();
   renderSettingsItems();
   updateTextImportPlaceholder();
+  loadStoreCodes();
+  // Show store management only in admin mode
+  document.querySelector('.store-section').style.display = isAdminMode ? '' : 'none';
 }
 
 function renderSettingsItems() {
