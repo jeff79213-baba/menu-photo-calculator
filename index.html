@@ -1244,20 +1244,42 @@ function setupAdminUnlock() {
 
 function buildShareUrlFromConfig() {
   var cfg = {
-    title: config.title,
-    subtitle: config.subtitle,
-    footer: config.footer,
-    totalLabel: config.totalLabel,
-    resetText: config.resetText,
-    emptyText: config.emptyText,
-    currency: config.currency,
-    layout: config.layout,
-    colors: config.colors,
-    items: config.items
+    t: config.title,
+    s: config.subtitle,
+    f: config.footer,
+    tl: config.totalLabel,
+    r: config.resetText,
+    e: config.emptyText,
+    c: config.currency,
+    l: config.layout,
+    co: config.colors,
+    i: config.items.map(function(item) {
+      return { n: item.name, p: item.price, u: item.unit, c: item.category, id: item.id };
+    })
   };
   var json = JSON.stringify(cfg);
   var compressed = LZString.compressToEncodedURIComponent(json);
   return window.location.origin + window.location.pathname + '#' + compressed;
+}
+
+function expandShareConfig(data) {
+  if (data.t || data.i) {
+    return {
+      title: data.t || '',
+      subtitle: data.s || '',
+      footer: data.f || '',
+      totalLabel: data.tl || '總金額',
+      resetText: data.r || '全部歸零',
+      emptyText: data.e || '還沒有點餐喔',
+      currency: data.c || '$',
+      layout: data.l || 'list',
+      colors: data.co || DEFAULT_CONFIG.colors,
+      items: data.i ? data.i.map(function(item) {
+        return { name: item.n, price: item.p, unit: item.u, category: item.c || '', id: item.id };
+      }) : []
+    };
+  }
+  return null;
 }
 
 function getCategories() {
@@ -1468,7 +1490,15 @@ function buildShareUrl() {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return null;
   delete cfg.adminPassword;
-  var json = JSON.stringify(cfg);
+  var short = {
+    t: cfg.title, s: cfg.subtitle, f: cfg.footer, tl: cfg.totalLabel,
+    r: cfg.resetText, e: cfg.emptyText, c: cfg.currency, l: cfg.layout,
+    co: cfg.colors,
+    i: cfg.items.map(function(item) {
+      return { n: item.name, p: item.price, u: item.unit, c: item.category, id: item.id };
+    })
+  };
+  var json = JSON.stringify(short);
   var compressed = LZString.compressToEncodedURIComponent(json);
   return window.location.origin + window.location.pathname + '#' + compressed;
 }
@@ -1519,7 +1549,8 @@ function loadConfigFromHash() {
   try {
     var json = LZString.decompressFromEncodedURIComponent(compressed);
     if (!json) return false;
-    var cfg = JSON.parse(json);
+    var raw = JSON.parse(json);
+    var cfg = expandShareConfig(raw) || raw;
     cfg.adminPassword = config.adminPassword || '0000';
     saveConfig(cfg);
     location.hash = '';
