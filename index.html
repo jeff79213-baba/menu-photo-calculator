@@ -924,7 +924,7 @@
       <input type="text" id="batchUnitInput" placeholder="個" maxlength="10">
       <button class="btn-secondary" id="batchUnitBtn" style="padding:4px 12px;font-size:13px">套用</button>
     </div>
-    <button class="add-item-btn" id="addItemBtn">＋ 新增 5 列</button>
+    <button class="add-item-btn" id="addItemBtn">＋ 新增品項</button>
 
     <h2>快速主題</h2>
     <p style="font-size:13px;color:#999;margin-bottom:10px;">點選主題自動填入顏色設定</p>
@@ -2146,9 +2146,7 @@ document.getElementById('addItemBtn').addEventListener('click', function() {
     config.customCode = current.customCode;
     config.adminPassword = current.adminPassword;
   }
-  for (var i = 0; i < 5; i++) {
-    config.items.push({ id: generateId(), name: '', price: 0, unit: '份', category: '' });
-  }
+  config.items.push({ id: generateId(), name: '', price: 0, unit: '份', category: '' });
   itemIdCounter = config.items.length;
   renderSettingsItems();
 });
