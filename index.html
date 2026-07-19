@@ -701,9 +701,10 @@
     <div class="store-section">
       <div style="font-size:12px;color:#999;margin-bottom:10px;">建立序號與店家名稱，每個序號對應一家店。建立後再到設定頁輸入序號產生專屬網址。</div>
       <div id="storeList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:10px">
-        <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-        <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1 1 100px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2 1 120px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="storePwInput" placeholder="預設密碼" style="flex:1 1 80px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
         <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
       </div>
     </div>
@@ -930,12 +931,22 @@
     <h2>管理員設定</h2>
     <div class="form-row">
       <div class="form-group">
-        <label for="inputAdminPassword">管理員密碼</label>
-        <div class="pw-wrap" style="position:relative;display:flex;align-items:center">
-          <input type="password" id="inputAdminPassword" placeholder="預設 0000" maxlength="10" style="flex:1;padding:10px 40px 10px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:15px;font-family:inherit;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a);outline:none;">
-          <button type="button" class="pw-toggle" onclick="togglePw('inputAdminPassword',this)" style="position:absolute;right:8px;background:none;border:none;cursor:pointer;padding:4px;line-height:1;display:flex;align-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <div id="localPwArea">
+          <label for="inputAdminPassword">管理員密碼</label>
+          <div class="pw-wrap" style="position:relative;display:flex;align-items:center">
+            <input type="password" id="inputAdminPassword" placeholder="預設 0000" style="flex:1;padding:10px 40px 10px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:15px;font-family:inherit;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a);outline:none;">
+            <button type="button" class="pw-toggle" onclick="togglePw('inputAdminPassword',this)" style="position:absolute;right:8px;background:none;border:none;cursor:pointer;padding:4px;line-height:1;display:flex;align-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div style="font-size:12px;color:#999;margin-top:4px;">點標題 5 下可解鎖設定，請自訂密碼避免被更改</div>
         </div>
-        <div style="font-size:12px;color:#999;margin-top:4px;">點標題 5 下可解鎖設定，請自訂密碼避免被更改</div>
+        <div id="consumerPwArea" style="display:none;margin-top:10px;border-top:1px solid #e0d8ce;padding-top:10px">
+          <label>更改店家密碼（存於雲端，不限長度）</label>
+          <div class="pw-wrap" style="position:relative;display:flex;align-items:center;margin-top:6px">
+            <input type="password" id="inputShopPassword" placeholder="輸入新密碼" style="flex:1;padding:10px 40px 10px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:15px;font-family:inherit;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a);outline:none;">
+            <button type="button" class="pw-toggle" onclick="togglePw('inputShopPassword',this)" style="position:absolute;right:8px;background:none;border:none;cursor:pointer;padding:4px;line-height:1;display:flex;align-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <button class="btn-primary" id="changeShopPwBtn" style="margin-top:6px;padding:6px 14px;font-size:13px">儲存新密碼</button>
+        </div>
       </div>
     </div>
 
@@ -1125,6 +1136,8 @@ let orderDetails = [];
 let itemIdCounter = 0;
 let isConsumerMode = false;
 let isAdminMode = false;
+let _firebasePassword = ''; // password loaded from Firestore, never saved to localStorage
+let _forcePwChange = false;
 
 // Temporary data from import
 let importData = null;
@@ -1285,11 +1298,16 @@ function setupAdminUnlock() {
     titleTapTimer = setTimeout(function() { titleTapCount = 0; }, 2000);
     if (titleTapCount >= 5) {
       titleTapCount = 0;
+      var expectedPwd = isConsumerMode && _firebasePassword ? _firebasePassword : (isConsumerMode ? null : (config.adminPassword || '0000'));
       var pwd = prompt('請輸入管理員密碼：');
-      if (pwd !== null && pwd.trim() === (config.adminPassword || '0000')) {
+      if (pwd !== null && pwd.trim() === expectedPwd) {
         isAdminMode = true;
         renderMainView();
         showToast('已切換為管理員模式', 'success');
+        // Force password change for shops on first login
+        if (isConsumerMode && _forcePwChange) {
+          setTimeout(function() { handleForcePwChange(); }, 500);
+        }
       } else if (pwd !== null) {
         showToast('密碼錯誤', 'error');
       }
@@ -1668,10 +1686,24 @@ function loadConfigFromShortCode(code) {
       colors: data.colors || DEFAULT_CONFIG.colors,
       items: data.items || []
     };
-    cfg.adminPassword = config.adminPassword || '0000';
     cfg.customCode = data.customCode || '';
     cfg.items.forEach(function(item) { if (!item.id) item.id = generateId(); });
     saveConfig(cfg);
+    // Load password from Firestore (if exists), not stored in localStorage
+    if (data.customCode) {
+      fdb.collection('store-codes').doc(data.customCode).get().then(function(storeDoc) {
+        if (storeDoc.exists) {
+          _firebasePassword = storeDoc.data().password || '0000';
+          if (storeDoc.data().forcePasswordChange) {
+            _forcePwChange = true;
+          }
+        } else {
+          _firebasePassword = '0000';
+        }
+      }).catch(function() { _firebasePassword = '0000'; });
+    } else {
+      _firebasePassword = '0000';
+    }
     resetQtys();
     isConsumerMode = true;
     showView('viewCalculator');
@@ -1684,6 +1716,36 @@ function loadConfigFromShortCode(code) {
 function closeShareModal() {
   document.getElementById('shareOverlay').style.display = 'none';
 }
+
+function handleForcePwChange() {
+  var newPw = prompt('首次登入，請設定新的管理員密碼（不限長度）：');
+  if (newPw === null) { showToast('請重新登入並設定密碼', 'info'); return; }
+  if (!newPw.trim()) { showToast('密碼不可空白', 'error'); return; }
+  var confirmPw = prompt('請再次輸入新密碼：');
+  if (confirmPw === null) { showToast('密碼設定已取消', 'info'); return; }
+  if (newPw !== confirmPw) { showToast('兩次密碼不一致', 'error'); return; }
+  var customCode = config.customCode;
+  if (!customCode) { showToast('找不到店家序號', 'error'); return; }
+  fdb.collection('store-codes').doc(customCode).update({
+    password: newPw.trim(),
+    forcePasswordChange: false
+  }).then(function() {
+    _firebasePassword = newPw.trim();
+    _forcePwChange = false;
+    showToast('密碼已更新', 'success');
+  }).catch(function(err) {
+    showToast('密碼更新失敗：' + err.message, 'error');
+  });
+}
+
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'inputShopPassword') {
+    // Enable button only when input has content
+    document.getElementById('changeShopPwBtn').disabled = !e.target.value.trim();
+  }
+});
+
+// Inline event for change shop password button - declared with var so it's hoisted
 
 function handleShareCopyLink() {
   var urlDisplay = document.getElementById('shareUrlDisplay');
@@ -1758,7 +1820,7 @@ function loadConfigFromHash() {
     if (!json) return false;
     var raw = JSON.parse(json);
     var cfg = expandShareConfig(raw) || raw;
-    cfg.adminPassword = config.adminPassword || '0000';
+    cfg.adminPassword = ''; // Not stored in localStorage for shared links
     saveConfig(cfg);
     location.hash = '';
     isConsumerMode = true;
@@ -2074,12 +2136,16 @@ function loadStoreCodes() {
 document.getElementById('addStoreBtn').addEventListener('click', function() {
   var code = document.getElementById('storeCodeInput').value.trim().toLowerCase();
   var name = document.getElementById('storeNameInput').value.trim();
+  var pw = document.getElementById('storePwInput').value.trim() || '0000';
   if (!code || code.length < 4) { showToast('序號至少 4 碼', 'info'); return; }
   if (!name) { showToast('請輸入店家名稱', 'info'); return; }
   document.getElementById('storeCodeInput').value = '';
   document.getElementById('storeNameInput').value = '';
+  document.getElementById('storePwInput').value = '';
   fdb.collection('store-codes').doc(code).set({
     shopName: name,
+    password: pw,
+    forcePasswordChange: true,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() {
     showToast('已建立序號 ' + code, 'success');
@@ -2118,6 +2184,18 @@ function renderSettingsView() {
     codeInput.disabled = false;
     codeInput.style.background = '';
     codeInput.title = '';
+  }
+  // Show/hide cloud password change area for shops
+  var pwArea = document.getElementById('consumerPwArea');
+  var localPw = document.getElementById('localPwArea');
+  if (pwArea && localPw) {
+    if (isConsumerMode && config.customCode) {
+      pwArea.style.display = 'block';
+      localPw.style.display = 'none';
+    } else {
+      pwArea.style.display = 'none';
+      localPw.style.display = 'block';
+    }
   }
 }
 
@@ -2231,7 +2309,7 @@ function gatherSettingsFromForm() {
       cardBg: document.getElementById('inputCardBg').value || '#fff'
     },
     items: items,
-    adminPassword: document.getElementById('inputAdminPassword').value.trim() || '0000',
+    adminPassword: isConsumerMode ? '' : (document.getElementById('inputAdminPassword').value.trim() || '0000'),
     customCode: document.getElementById('customCode').value.trim().toLowerCase() || ''
   };
 }
@@ -2465,6 +2543,25 @@ document.getElementById('backToCalculator').addEventListener('click', function()
 document.getElementById('resetBtn').addEventListener('click', function() {
   resetQtys();
   updateTotal();
+});
+
+document.getElementById('changeShopPwBtn').addEventListener('click', function() {
+  var input = document.getElementById('inputShopPassword');
+  var newPw = input.value.trim();
+  if (!newPw) { showToast('請輸入新密碼', 'info'); return; }
+  var customCode = config.customCode;
+  if (!customCode) { showToast('找不到店家序號', 'error'); return; }
+  fdb.collection('store-codes').doc(customCode).update({
+    password: newPw,
+    forcePasswordChange: false
+  }).then(function() {
+    _firebasePassword = newPw;
+    _forcePwChange = false;
+    input.value = '';
+    showToast('雲端密碼已更新', 'success');
+  }).catch(function(err) {
+    showToast('密碼更新失敗：' + err.message, 'error');
+  });
 });
 
 document.getElementById('copyDetailBtn').addEventListener('click', copyOrderDetails);
