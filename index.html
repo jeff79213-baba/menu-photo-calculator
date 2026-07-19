@@ -140,6 +140,13 @@
   .menu-item .info { display: flex; flex-direction: column; min-width: 0; }
   .menu-item .name { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .menu-item .price { font-size: 12px; color: var(--color-header-bg, #e85d2c); font-weight: 600; margin-top: 1px; }
+  .commit-btn {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 8px; border: none;
+    background: var(--color-header-bg, #e85d2c); color: #fff; font-size: 12px; font-weight: 800;
+    cursor: pointer; transition: all .15s; font-family: inherit; letter-spacing: 0; margin: 0 4px;
+  }
+  .commit-btn:active { transform: scale(.85); }
+  .commit-btn:disabled { opacity: .3; cursor: default; transform: none; }
   .qty-control { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .qty-btn {
     width: 30px; height: 30px;
@@ -1063,6 +1070,7 @@ const DEFAULT_CONFIG = {
 // ================================================================
 let config = {};
 let qtys = {};
+let orderDetails = [];
 let itemIdCounter = 0;
 let isConsumerMode = false;
 let isAdminMode = false;
@@ -1167,6 +1175,7 @@ function saveConfig(cfg) {
 
 function resetQtys() {
   qtys = {};
+  orderDetails = [];
   if (config.items) {
     config.items.forEach(function(item) { qtys[item.id] = 0; });
   }
@@ -1312,7 +1321,7 @@ function renderItems() {
     var qty = qtys[item.id] || 0;
     var div = document.createElement('div');
     div.className = 'menu-item';
-    div.innerHTML = '<div class="info"><div class="name">' + escapeHtml(item.name) + '</div><div class="price">' + config.currency + item.price + ' / ' + escapeHtml(item.unit) + '</div></div><div class="qty-control"><button class="qty-btn minus" data-id="' + item.id + '">−</button><span class="qty-num" id="qty_' + item.id + '">' + qty + '</span><button class="qty-btn plus" data-id="' + item.id + '">+</button></div>';
+    div.innerHTML = '<div class="info"><div class="name">' + escapeHtml(item.name) + '</div><div class="price">' + config.currency + item.price + ' / ' + escapeHtml(item.unit) + '</div></div><button class="commit-btn" data-id="' + item.id + '" ' + (qty > 0 ? '' : 'disabled') + '>計</button><div class="qty-control"><button class="qty-btn minus" data-id="' + item.id + '">−</button><span class="qty-num" id="qty_' + item.id + '">' + qty + '</span><button class="qty-btn plus" data-id="' + item.id + '">+</button></div>';
     container.appendChild(div);
   });
 
@@ -1327,6 +1336,19 @@ function renderItems() {
       updateTotal();
     });
   });
+
+  document.querySelectorAll('#menuItems .commit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = this.dataset.id;
+      var qty = qtys[id] || 0;
+      if (qty <= 0) return;
+      var item = config.items.find(function(it) { return it.id === id; });
+      if (!item) return;
+      orderDetails.push({ id: id, name: item.name, price: item.price, unit: item.unit, qty: qty });
+      qtys[id] = 0;
+      updateTotal();
+    });
+  });
 }
 
 function updateTotal() {
@@ -1335,11 +1357,28 @@ function updateTotal() {
     if (el) el.textContent = qtys[item.id] || 0;
   });
 
+  // Refresh commit button disabled state
+  document.querySelectorAll('#menuItems .commit-btn').forEach(function(btn) {
+    var id = btn.dataset.id;
+    btn.disabled = !(qtys[id] > 0);
+  });
+
   var total = 0;
   config.items.forEach(function(item) { total += (qtys[item.id] || 0) * item.price; });
+  orderDetails.forEach(function(d) { total += d.qty * d.price; });
   document.getElementById('totalAmount').innerHTML = config.currency + total;
 
   var parts = [];
+  // Show committed items summary
+  var summaryMap = {};
+  orderDetails.forEach(function(d) {
+    if (!summaryMap[d.id]) summaryMap[d.id] = { name: d.name, qty: 0, unit: d.unit };
+    summaryMap[d.id].qty += d.qty;
+  });
+  for (var sid in summaryMap) {
+    parts.push(summaryMap[sid].name + ' ' + summaryMap[sid].qty + summaryMap[sid].unit);
+  }
+  // Also show pending items
   config.items.forEach(function(item) {
     var q = qtys[item.id] || 0;
     if (q > 0) parts.push(item.name + ' ' + q + item.unit);
@@ -1365,15 +1404,15 @@ function renderOrderDetail() {
   var body = document.getElementById('orderDetailBody');
   var html = '';
   var total = 0;
-  config.items.forEach(function(item) {
-    var q = qtys[item.id] || 0;
-    if (q > 0) {
-      var sub = q * item.price;
+  if (orderDetails.length === 0) {
+    html = '<p style="text-align:center;color:#999;padding:20px 0;">還沒有紀錄已計的品項</p>';
+  } else {
+    orderDetails.forEach(function(d, idx) {
+      var sub = d.qty * d.price;
       total += sub;
-      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(item.name) + '</span><span class="item-qty">x ' + q + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span></div>';
-    }
-  });
-  if (!html) html = '<p style="text-align:center;color:#999;padding:20px 0;">' + config.emptyText + '</p>';
+      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(d.name) + '</span><span class="item-qty">x ' + d.qty + '</span><span class="item-unit-sm">' + escapeHtml(d.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span></div>';
+    });
+  }
   body.innerHTML = html;
   document.getElementById('sheetTotal').innerHTML = '<span class="label">總計 </span>' + config.currency + total;
 }
@@ -1398,17 +1437,12 @@ function copyOrderDetails() {
   }
   lines.push('──────────');
   var total = 0;
-  var hasItems = false;
-  config.items.forEach(function(item) {
-    var q = qtys[item.id] || 0;
-    if (q > 0) {
-      hasItems = true;
-      var sub = q * item.price;
-      total += sub;
-      lines.push(item.name + ' x ' + q + ' ' + item.unit + ' = ' + config.currency + sub);
-    }
+  if (orderDetails.length === 0) { showToast('目前沒有已計的品項', 'info'); return; }
+  orderDetails.forEach(function(d) {
+    var sub = d.qty * d.price;
+    total += sub;
+    lines.push(d.name + ' x ' + d.qty + ' ' + d.unit + ' = ' + config.currency + sub);
   });
-  if (!hasItems) { showToast('目前沒有選取任何品項', 'info'); return; }
   lines.push('──────────');
   lines.push('💰 總計: ' + config.currency + total);
   copyToClipboard(lines.join('\n'), '📋 明細');
@@ -1728,6 +1762,7 @@ function doStartOrder() {
   config.subtitle = data.subtitle;
   config.items = data.items;
   saveConfig(config);
+  resetQtys();
   isAdminMode = true;
   showView('viewCalculator');
   renderMainView();
@@ -1911,6 +1946,7 @@ function importConfig(raw, stayInSettings) {
   if (stayInSettings) {
     showToast('已匯入 ' + items.length + ' 項品項，title/subtitle 已更新', 'success');
   } else {
+    resetQtys();
     showView('viewCalculator');
     renderMainView();
   }
@@ -2087,19 +2123,15 @@ document.getElementById('resetBtn').addEventListener('click', function() {
 
 document.getElementById('copyDetailBtn').addEventListener('click', copyOrderDetails);
 document.getElementById('clickDetailBtn').addEventListener('click', function() {
-  var hasItems = false;
-  for (var id in qtys) { if (qtys[id] > 0) { hasItems = true; break; } }
-  if (hasItems) openOrderDetail();
-  else showToast('還沒有點餐', 'info');
+  if (orderDetails.length > 0) openOrderDetail();
+  else showToast('還沒有已計的品項，請先按「計」', 'info');
 });
 document.getElementById('closeDetailBtn').addEventListener('click', closeOrderDetail);
 
 // Click total bar to open order detail
 document.querySelector('.total-bar').addEventListener('click', function(e) {
   if (e.target.closest('.total-bar-link')) return;
-  var hasItems = false;
-  for (var id in qtys) { if (qtys[id] > 0) { hasItems = true; break; } }
-  if (hasItems) openOrderDetail();
+  if (orderDetails.length > 0) openOrderDetail();
 });
 
 // Share modal
@@ -2134,6 +2166,7 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
   // Check if shared via hash
   if (location.hash && location.hash.length > 1) {
     if (loadConfigFromHash()) {
+      resetQtys();
       showView('viewCalculator');
       renderMainView();
       return;
@@ -2142,6 +2175,7 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
 
   // If admin mode via URL, go straight to calculator
   if (isAdminMode) {
+    resetQtys();
     showView('viewCalculator');
     renderMainView();
     return;
