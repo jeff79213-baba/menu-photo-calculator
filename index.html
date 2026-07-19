@@ -569,6 +569,8 @@
   .sheet-item .item-name { font-weight: 500; }
   .sheet-item .item-qty { color: #999; font-size: 13px; }
   .sheet-item .item-subtotal { font-weight: 700; color: var(--color-accent, #c73e1d); }
+  .sheet-item-del { background: none; border: none; font-size: 18px; color: #ccc; cursor: pointer; padding: 0 4px 0 10px; line-height: 1; }
+  .sheet-item-del:hover { color: #e85d2c; }
   .sheet-footer { padding: 12px 20px 20px; border-top: 1px solid #f0ebe3; text-align: center; flex-shrink: 0; }
   .sheet-footer .sheet-total { font-size: 20px; font-weight: 800; color: var(--color-accent, #c73e1d); margin-bottom: 10px; }
   .sheet-footer .sheet-total .label { font-size: 14px; font-weight: 400; color: #888; }
@@ -1410,11 +1412,20 @@ function renderOrderDetail() {
     orderDetails.forEach(function(d, idx) {
       var sub = d.qty * d.price;
       total += sub;
-      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(d.name) + '</span><span class="item-qty">x ' + d.qty + '</span><span class="item-unit-sm">' + escapeHtml(d.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span></div>';
+      html += '<div class="sheet-item"><div class="item-left"><span class="item-name">' + escapeHtml(d.name) + '</span><span class="item-qty">x ' + d.qty + '</span><span class="item-unit-sm">' + escapeHtml(d.unit) + '</span></div><span class="item-subtotal">' + config.currency + sub + '</span><button class="sheet-item-del" data-idx="' + idx + '">✕</button></div>';
     });
   }
   body.innerHTML = html;
   document.getElementById('sheetTotal').innerHTML = '<span class="label">總計 </span>' + config.currency + total;
+
+  body.querySelectorAll('.sheet-item-del').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      orderDetails.splice(idx, 1);
+      renderOrderDetail();
+      updateTotal();
+    });
+  });
 }
 
 function copyOrderDetails() {
