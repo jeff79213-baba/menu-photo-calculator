@@ -2011,7 +2011,7 @@ document.getElementById('downloadConfig').addEventListener('click', function() {
   var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url; a.download = 'calculator-config.json';
+  a.href = url;   a.download = 'menu-config.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 });
