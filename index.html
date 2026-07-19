@@ -980,7 +980,7 @@
     </div>
 
     <div class="paste-area">
-      <div style="font-size:12px;color:#999;margin-bottom:6px;">📋 貼上 JSON 匯入設定</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">📋 貼上 JSON 匯入設定（匯入後更改全部品項）</div>
       <textarea id="jsonPasteInput" placeholder="將 JSON 貼在這裡..."></textarea>
       <div class="paste-actions" style="margin-top:8px">
         <button class="btn-primary" id="importPasteBtn">📥 匯入</button>
@@ -989,7 +989,7 @@
     </div>
 
     <div class="text-import-area">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">📋 文字匯入品項</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">📋 文字匯入品項 <span style="font-weight:400;font-size:12px;color:#e85d2c;">注意［匯入品項］會覆蓋全部內容</span></div>
       <div style="font-size:12px;color:#999;margin-bottom:6px;">每行一筆，格式 <code>品名-單位-價格</code>，可加分類 <code>品名-單位-價格-分類</code></div>
       <div style="font-size:12px;color:#999;margin-bottom:6px;">例如：<code id="textImportExample">益生菌-盒-1980</code>　<code id="textImportExampleCat">串燒-串-45-串燒</code></div>
       <textarea id="textImportInput" placeholder="益生菌-盒-1980"></textarea>
@@ -1052,8 +1052,8 @@ const THEMES = [
 ];
 
 const DEFAULT_CONFIG = {
-  title: "雯雯小吃",
-  subtitle: "吃益生菌提升免疫力",
+  title: "莉雯照顧你的健康",
+  subtitle: "0919 023 491",
   footer: "誠實經營，幸福長久",
   totalLabel: "總金額",
   resetText: "全部歸零",
@@ -2117,9 +2117,9 @@ function updateTextImportPlaceholder() {
     var cat = first.category && first.category.trim() ? first.category : '分類';
     if (exCatEl) exCatEl.textContent = first.name + '-' + first.unit + '-' + first.price + '-' + cat;
   } else {
-    ta.placeholder = '品名-單位-價格';
-    if (exEl) exEl.textContent = '益生菌-盒-1980';
-    if (exCatEl) exCatEl.textContent = '串燒-串-45-串燒';
+    ta.placeholder = '雞排-片-80';
+    if (exEl) exEl.textContent = '雞排-片-80';
+    if (exCatEl) exCatEl.textContent = '雞排-片-80-炸物';
   }
 }
 
