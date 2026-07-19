@@ -257,6 +257,7 @@
   }
   .home-btn .icon.orange { background: #fef0e8; }
   .home-btn .icon.green { background: #e8f5e9; }
+  .home-btn .icon.purple { background: #f3e8ff; }
   .home-btn .btn-label { font-size: 13px; font-weight: 400; color: #999; margin-top: 2px; }
 
   /* ===== IMPORT VIEW ===== */
@@ -678,6 +679,34 @@
         <div class="btn-label">跳過拍照，直接進計算機點餐</div>
       </span>
     </button>
+    <button class="home-btn" id="btnGoManageStore">
+      <span class="icon purple">🏪</span>
+      <span>新增店家
+        <div class="btn-label">建立店家序號，產生專屬分享網址</div>
+      </span>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     VIEW: MANAGE STORE
+     ============================================================ -->
+<div id="viewManageStore" class="view">
+  <div class="settings-container">
+    <div class="settings-header-bar">
+      <h1>🏪 新增店家</h1>
+      <button class="close-btn" id="closeManageStore" title="返回">✕</button>
+    </div>
+
+    <div class="store-section">
+      <div style="font-size:12px;color:#999;margin-bottom:10px;">建立序號與店家名稱，每個序號對應一家店。建立後再到設定頁輸入序號產生專屬網址。</div>
+      <div id="storeList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+        <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -998,23 +1027,12 @@
       </div>
     </div>
 
-    <div class="store-section">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🏪 商店管理</div>
-      <div style="font-size:12px;color:#999;margin-bottom:6px;">建立商店序號與店家名稱，每個序號對應一家店</div>
-      <div id="storeList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:10px">
-        <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-        <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-        <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
-      </div>
-    </div>
-
     <div class="share-code-section">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🔗 短網址分享</div>
-      <div style="font-size:12px;color:#999;margin-bottom:6px;">選取商店序號產生專屬網址，序號一經設定無法更改</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">🔗 店家序號</div>
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">輸入已建立的店家序號，產生專屬分享網址（序號一經設定無法更改）</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <input type="text" id="customCode" placeholder="請先在上方建立商店序號" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#f5f2ed">
-        <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 分享菜單</button>
+        <input type="text" id="customCode" placeholder="例如：storeA" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+        <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 產生網址</button>
       </div>
     </div>
 
@@ -1979,6 +1997,16 @@ document.getElementById('btnGoCalculator').addEventListener('click', function() 
   renderMainView();
 });
 
+// Home → Manage Store
+document.getElementById('btnGoManageStore').addEventListener('click', function() {
+  isAdminMode = true;
+  showView('viewManageStore');
+  loadStoreCodes();
+});
+document.getElementById('closeManageStore').addEventListener('click', function() {
+  showView('viewHome');
+});
+
 // Import → Back to Home
 document.getElementById('btnImportBack').addEventListener('click', function() {
   showView('viewHome');
@@ -2091,9 +2119,17 @@ function renderSettingsView() {
   renderThemeSelector();
   renderSettingsItems();
   updateTextImportPlaceholder();
-  loadStoreCodes();
-  // Show store management only in admin mode
-  document.querySelector('.store-section').style.display = isAdminMode ? '' : 'none';
+  // Lock customCode field if already set for this shop
+  var codeInput = document.getElementById('customCode');
+  if (config.customCode) {
+    codeInput.disabled = true;
+    codeInput.style.background = '#f0ede8';
+    codeInput.title = '此序號已鎖定，無法更改';
+  } else {
+    codeInput.disabled = false;
+    codeInput.style.background = '';
+    codeInput.title = '';
+  }
 }
 
 function renderSettingsItems() {
