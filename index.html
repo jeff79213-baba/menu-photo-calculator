@@ -1209,7 +1209,7 @@ function showView(viewId) {
 // ================================================================
 function loadConfig() {
   try {
-    var raw = localStorage.getItem('calculatorConfig');
+    var raw = localStorage.getItem('mpc-calculatorConfig');
     if (raw) {
       var parsed = JSON.parse(raw);
       if (parsed.items) {
@@ -1242,7 +1242,7 @@ function loadConfig() {
 }
 
 function saveConfig(cfg) {
-  localStorage.setItem('calculatorConfig', JSON.stringify(cfg));
+  localStorage.setItem('mpc-calculatorConfig', JSON.stringify(cfg));
   config = cfg;
 }
 
