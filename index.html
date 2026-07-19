@@ -2078,6 +2078,12 @@ function renderSettingsItems() {
       if (config.items.length <= 1) { showToast('至少需要一個品項', 'info'); return; }
       var id = row.dataset.id;
       config.items = config.items.filter(function(it) { return it.id !== id; });
+      // If current filter no longer matches any items, reset to 'all'
+      if (settingsCategoryFilter !== 'all') {
+        var match = config.items.some(function(it) { return it.category && it.category.trim() === settingsCategoryFilter; });
+        if (!match) settingsCategoryFilter = 'all';
+      }
+      saveConfig(config);
       renderSettingsItems();
     });
   });
