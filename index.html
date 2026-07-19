@@ -1632,14 +1632,14 @@ function generateShortUrl(customCode) {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
   // Delete old docs with same customCode so old URLs stop working
-  fdb.collection('shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
+  fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
     var batch = fdb.batch();
     snapshot.forEach(function(doc) { batch.delete(doc.ref); });
     return batch.commit();
   }).catch(function(err) {
     console.warn('清理舊短網址失敗（繼續建立新網址）:', err.message);
   }).then(function() {
-    return fdb.collection('shortlinks').doc(docId).set({
+    return fdb.collection('mpc-shortlinks').doc(docId).set({
       title: cfg.title,
       subtitle: cfg.subtitle,
       footer: cfg.footer,
@@ -1668,7 +1668,7 @@ function generateShortUrl(customCode) {
 // Load config from short code (?s=xxx)
 function loadConfigFromShortCode(code) {
   showToast('正在載入共享菜單…', 'info');
-  fdb.collection('shortlinks').doc(code).get().then(function(doc) {
+  fdb.collection('mpc-shortlinks').doc(code).get().then(function(doc) {
     if (!doc.exists) {
       showToast('找不到此短網址的資料', 'error');
       return;
@@ -1691,7 +1691,7 @@ function loadConfigFromShortCode(code) {
     saveConfig(cfg);
     // Load password from Firestore (if exists), not stored in localStorage
     if (data.customCode) {
-      fdb.collection('store-codes').doc(data.customCode).get().then(function(storeDoc) {
+      fdb.collection('mpc-store-codes').doc(data.customCode).get().then(function(storeDoc) {
         if (storeDoc.exists) {
           _firebasePassword = storeDoc.data().password || '0000';
           if (storeDoc.data().forcePasswordChange) {
@@ -1726,7 +1726,7 @@ function handleForcePwChange() {
   if (newPw !== confirmPw) { showToast('兩次密碼不一致', 'error'); return; }
   var customCode = config.customCode;
   if (!customCode) { showToast('找不到店家序號', 'error'); return; }
-  fdb.collection('store-codes').doc(customCode).update({
+  fdb.collection('mpc-store-codes').doc(customCode).update({
     password: newPw.trim(),
     forcePasswordChange: false
   }).then(function() {
@@ -2116,7 +2116,7 @@ function renderThemeSelector() {
 function loadStoreCodes() {
   var list = document.getElementById('storeList');
   if (!list) return;
-  fdb.collection('store-codes').orderBy('createdAt').get().then(function(snapshot) {
+  fdb.collection('mpc-store-codes').orderBy('createdAt').get().then(function(snapshot) {
     list.innerHTML = '';
     snapshot.forEach(function(doc) {
       var d = doc.data();
@@ -2126,7 +2126,7 @@ function loadStoreCodes() {
       list.appendChild(row);
       row.querySelector('.del-store-btn').addEventListener('click', function() {
         if (confirm('確定刪除序號「' + doc.id + '」？此動作無法復原。')) {
-          fdb.collection('store-codes').doc(doc.id).delete().then(function() { loadStoreCodes(); });
+          fdb.collection('mpc-store-codes').doc(doc.id).delete().then(function() { loadStoreCodes(); });
         }
       });
     });
@@ -2142,7 +2142,7 @@ document.getElementById('addStoreBtn').addEventListener('click', function() {
   document.getElementById('storeCodeInput').value = '';
   document.getElementById('storeNameInput').value = '';
   document.getElementById('storePwInput').value = '';
-  fdb.collection('store-codes').doc(code).set({
+  fdb.collection('mpc-store-codes').doc(code).set({
     shopName: name,
     password: pw,
     forcePasswordChange: true,
@@ -2551,7 +2551,7 @@ document.getElementById('changeShopPwBtn').addEventListener('click', function() 
   if (!newPw) { showToast('請輸入新密碼', 'info'); return; }
   var customCode = config.customCode;
   if (!customCode) { showToast('找不到店家序號', 'error'); return; }
-  fdb.collection('store-codes').doc(customCode).update({
+  fdb.collection('mpc-store-codes').doc(customCode).update({
     password: newPw,
     forcePasswordChange: false
   }).then(function() {
