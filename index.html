@@ -1064,6 +1064,11 @@
       <span class="text">複製連結<span class="desc">傳到 LINE，對方點開直接載入</span></span>
     </button>
     <div class="share-url" id="shareUrlDisplay"></div>
+    <div id="shareExpiryInfo" style="font-size:12px;color:#999;margin:4px 0 10px;text-align:center;display:none"></div>
+    <button class="share-option" id="shareExtendBtn" style="display:none">
+      <span class="icon">🔄</span>
+      <span class="text">延長時限<span class="desc">重新延長 30 天（從今天起算）</span></span>
+    </button>
 
     <button class="share-option" id="shareCopyJson">
       <span class="icon">📋</span>
@@ -1138,6 +1143,8 @@ let isConsumerMode = false;
 let isAdminMode = false;
 let _firebasePassword = ''; // password loaded from Firestore, never saved to localStorage
 let _forcePwChange = false;
+let _linkCreatedAt = null; // timestamp from shortlink doc
+let _linkExpiresAt = null;
 
 // Temporary data from import
 let importData = null;
@@ -1654,11 +1661,17 @@ function generateShortUrl(customCode) {
       items: cfg.items.map(function(item) {
         return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
       }),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 天後過期
     });
   }).then(function() {
     var url = window.location.origin + window.location.pathname + '?s=' + docId;
     document.getElementById('shareUrlDisplay').textContent = url;
+    // Show expiry info
+    var expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    _linkExpiresAt = expiresDate;
+    _linkCreatedAt = new Date();
+    showShareExpiryInfo();
     showToast('短網址已產生！', 'success');
   }).catch(function(err) {
     showToast('上傳失敗：' + err.message, 'error');
@@ -1674,6 +1687,15 @@ function loadConfigFromShortCode(code) {
       return;
     }
     var data = doc.data();
+    // Check if expired
+    if (data.expiresAt) {
+      var expiresAt = data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
+      if (Date.now() > expiresAt.getTime()) {
+        showToast('此連結已過期，請向店家索取新網址', 'error');
+        setTimeout(function() { showView('viewHome'); }, 1500);
+        return;
+      }
+    }
     var cfg = {
       title: data.title || '',
       subtitle: data.subtitle || '',
@@ -1689,6 +1711,9 @@ function loadConfigFromShortCode(code) {
     cfg.customCode = data.customCode || '';
     cfg.items.forEach(function(item) { if (!item.id) item.id = generateId(); });
     saveConfig(cfg);
+    // Store expiry info for display
+    _linkCreatedAt = data.createdAt || null;
+    _linkExpiresAt = data.expiresAt || null;
     // Load password from Firestore (if exists), not stored in localStorage
     if (data.customCode) {
       fdb.collection('mpc-store-codes').doc(data.customCode).get().then(function(storeDoc) {
@@ -1715,6 +1740,54 @@ function loadConfigFromShortCode(code) {
 
 function closeShareModal() {
   document.getElementById('shareOverlay').style.display = 'none';
+}
+
+function showShareExpiryInfo() {
+  var infoEl = document.getElementById('shareExpiryInfo');
+  var extendBtn = document.getElementById('shareExtendBtn');
+  if (!_linkCreatedAt && !_linkExpiresAt) { infoEl.style.display = 'none'; extendBtn.style.display = 'none'; return; }
+  var createdStr = '', expiresStr = '', elapsedStr = '';
+  var now = Date.now();
+  if (_linkCreatedAt) {
+    var c = _linkCreatedAt.toDate ? _linkCreatedAt.toDate() : new Date(_linkCreatedAt);
+    createdStr = '📅 建立：' + fmtDate(c);
+    var elapsedDays = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
+    elapsedStr = '（已使用 ' + elapsedDays + ' 天）';
+  }
+  if (_linkExpiresAt) {
+    var e = _linkExpiresAt.toDate ? _linkExpiresAt.toDate() : new Date(_linkExpiresAt);
+    expiresStr = '⏳ 到期：' + fmtDate(e);
+    var remaining = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
+    if (remaining > 0) expiresStr += '（剩 ' + remaining + ' 天）';
+    else expiresStr += '（已過期）';
+  }
+  infoEl.textContent = createdStr + ' ｜ ' + expiresStr + (elapsedStr ? ' ' + elapsedStr : '');
+  infoEl.style.display = 'block';
+  extendBtn.style.display = _linkExpiresAt ? 'block' : 'none';
+}
+
+function fmtDate(d) {
+  return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+}
+
+function handleExtendLink() {
+  var urlDisplay = document.getElementById('shareUrlDisplay');
+  var url = urlDisplay.textContent;
+  if (!url) { showToast('請先產生網址', 'info'); return; }
+  var code = config.customCode;
+  if (!code) { showToast('找不到店家序號', 'error'); return; }
+  var newExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  fdb.collection('mpc-shortlinks').where('customCode', '==', code).get().then(function(snapshot) {
+    var batch = fdb.batch();
+    snapshot.forEach(function(doc) { batch.update(doc.ref, { expiresAt: newExpires }); });
+    return batch.commit();
+  }).then(function() {
+    _linkExpiresAt = newExpires;
+    showShareExpiryInfo();
+    showToast('已延長時限 30 天', 'success');
+  }).catch(function(err) {
+    showToast('延長失敗：' + err.message, 'error');
+  });
 }
 
 function handleForcePwChange() {
@@ -2584,6 +2657,7 @@ document.getElementById('shareConfig').addEventListener('click', openShareModal)
 document.getElementById('shareCopyLink').addEventListener('click', handleShareCopyLink);
 document.getElementById('shareCopyJson').addEventListener('click', handleShareCopyJson);
 document.getElementById('shareShowQR').addEventListener('click', handleShareShowQR);
+document.getElementById('shareExtendBtn').addEventListener('click', handleExtendLink);
 document.getElementById('shareCloseBtn').addEventListener('click', closeShareModal);
 document.getElementById('shareOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeShareModal();
