@@ -1045,6 +1045,7 @@
         <input type="text" id="customCode" placeholder="例如：storeA" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
         <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 產生網址</button>
       </div>
+      <div id="settingsLinkInfo" style="font-size:12px;color:#999;margin-bottom:6px;display:none"></div>
     </div>
 
     <button class="back-btn" id="backToCalculator">← 返回計算機</button>
@@ -1764,6 +1765,7 @@ function showShareExpiryInfo() {
   infoEl.textContent = createdStr + ' ｜ ' + expiresStr + (elapsedStr ? ' ' + elapsedStr : '');
   infoEl.style.display = 'block';
   extendBtn.style.display = _linkExpiresAt ? 'block' : 'none';
+  updateSettingsLinkInfo();
 }
 
 function fmtDate(d) {
@@ -2269,6 +2271,33 @@ function renderSettingsView() {
       pwArea.style.display = 'none';
       localPw.style.display = 'block';
     }
+  }
+  // Show link info in settings
+  updateSettingsLinkInfo();
+}
+
+function updateSettingsLinkInfo() {
+  var el = document.getElementById('settingsLinkInfo');
+  if (!el) return;
+  if (config.customCode && _linkCreatedAt) {
+    var createdStr = '', expiresStr = '';
+    var now = Date.now();
+    if (_linkCreatedAt) {
+      var c = _linkCreatedAt.toDate ? _linkCreatedAt.toDate() : new Date(_linkCreatedAt);
+      createdStr = '📅 ' + fmtDate(c);
+      var elapsedDays = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
+      createdStr += '（已 ' + elapsedDays + ' 天）';
+    }
+    if (_linkExpiresAt) {
+      var e = _linkExpiresAt.toDate ? _linkExpiresAt.toDate() : new Date(_linkExpiresAt);
+      expiresStr = '⏳ 到期 ' + fmtDate(e);
+      var remaining = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
+      expiresStr += '（剩 ' + remaining + ' 天）';
+    }
+    el.textContent = createdStr + ' ｜ ' + expiresStr;
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
   }
 }
 
