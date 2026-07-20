@@ -2122,7 +2122,7 @@ function loadStoreCodes() {
       var d = doc.data();
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:#f9f7f4;margin-bottom:4px;font-size:13px';
-      row.innerHTML = '<span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + '</span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button>';
+      row.innerHTML = '<span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button>';
       list.appendChild(row);
       row.querySelector('.del-store-btn').addEventListener('click', function() {
         if (confirm('確定刪除序號「' + doc.id + '」？此動作無法復原。')) {
