@@ -1045,7 +1045,6 @@
         <input type="text" id="customCode" placeholder="例如：storeA" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
         <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 產生網址</button>
       </div>
-      <div id="settingsLinkInfo" style="font-size:12px;color:#999;margin-bottom:6px;display:none"></div>
     </div>
 
     <button class="back-btn" id="backToCalculator">← 返回計算機</button>
@@ -1673,6 +1672,10 @@ function generateShortUrl(customCode) {
     _linkExpiresAt = expiresDate;
     _linkCreatedAt = new Date();
     showShareExpiryInfo();
+    // Save link info to store-codes so store list shows it
+    fdb.collection('mpc-store-codes').doc(customCode).update({
+      linkExpiresAt: expiresDate
+    }).catch(function() {});
     showToast('短網址已產生！', 'success');
   }).catch(function(err) {
     showToast('上傳失敗：' + err.message, 'error');
@@ -1765,7 +1768,6 @@ function showShareExpiryInfo() {
   infoEl.textContent = createdStr + ' ｜ ' + expiresStr + (elapsedStr ? ' ' + elapsedStr : '');
   infoEl.style.display = 'block';
   extendBtn.style.display = _linkExpiresAt ? 'block' : 'none';
-  updateSettingsLinkInfo();
 }
 
 function fmtDate(d) {
@@ -1786,6 +1788,10 @@ function handleExtendLink() {
   }).then(function() {
     _linkExpiresAt = newExpires;
     showShareExpiryInfo();
+    // Also update store-codes for store list
+    fdb.collection('mpc-store-codes').doc(code).update({
+      linkExpiresAt: newExpires
+    }).catch(function() {});
     showToast('已延長時限 30 天', 'success');
   }).catch(function(err) {
     showToast('延長失敗：' + err.message, 'error');
@@ -2196,8 +2202,24 @@ function loadStoreCodes() {
     snapshot.forEach(function(doc) {
       var d = doc.data();
       var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:#f9f7f4;margin-bottom:4px;font-size:13px';
-      row.innerHTML = '<span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button>';
+      row.style.cssText = 'padding:6px 8px;border-radius:6px;background:#f9f7f4;margin-bottom:4px;font-size:13px';
+      // Time info
+      var timeStr = '';
+      var now = Date.now();
+      if (d.createdAt) {
+        var c = d.createdAt.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+        var days = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
+        timeStr = '📅 ' + fmtDate(c) + '（已 ' + days + ' 天）';
+      }
+      if (d.linkExpiresAt) {
+        var e = d.linkExpiresAt.toDate ? d.linkExpiresAt.toDate() : new Date(d.linkExpiresAt);
+        timeStr += ' ｜ ⏳ ' + fmtDate(e);
+        var rem = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
+        timeStr += '（剩 ' + rem + ' 天）';
+      } else if (d.createdAt) {
+        timeStr += ' ｜ 🔴 未產生連結';
+      }
+      row.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button></div>' + (timeStr ? '<div style="font-size:11px;color:#888;margin-top:2px;padding-left:4px">' + timeStr + '</div>' : '');
       list.appendChild(row);
       row.querySelector('.del-store-btn').addEventListener('click', function() {
         if (confirm('確定刪除序號「' + doc.id + '」？此動作無法復原。')) {
@@ -2271,33 +2293,6 @@ function renderSettingsView() {
       pwArea.style.display = 'none';
       localPw.style.display = 'block';
     }
-  }
-  // Show link info in settings
-  updateSettingsLinkInfo();
-}
-
-function updateSettingsLinkInfo() {
-  var el = document.getElementById('settingsLinkInfo');
-  if (!el) return;
-  if (config.customCode && _linkCreatedAt) {
-    var createdStr = '', expiresStr = '';
-    var now = Date.now();
-    if (_linkCreatedAt) {
-      var c = _linkCreatedAt.toDate ? _linkCreatedAt.toDate() : new Date(_linkCreatedAt);
-      createdStr = '📅 ' + fmtDate(c);
-      var elapsedDays = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
-      createdStr += '（已 ' + elapsedDays + ' 天）';
-    }
-    if (_linkExpiresAt) {
-      var e = _linkExpiresAt.toDate ? _linkExpiresAt.toDate() : new Date(_linkExpiresAt);
-      expiresStr = '⏳ 到期 ' + fmtDate(e);
-      var remaining = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
-      expiresStr += '（剩 ' + remaining + ' 天）';
-    }
-    el.textContent = createdStr + ' ｜ ' + expiresStr;
-    el.style.display = 'block';
-  } else {
-    el.style.display = 'none';
   }
 }
 
