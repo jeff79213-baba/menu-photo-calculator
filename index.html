@@ -1059,6 +1059,19 @@
     <h3 id="shareTitle">📤 分享菜單</h3>
     <div class="subtitle" id="shareSubtitle">分享你的品項與價格設定</div>
 
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;justify-content:center;font-size:13px;color:#666">
+      <span>有效期限：</span>
+      <select id="shareExpiryDays" style="padding:6px 10px;border:2px solid #e0d8ce;border-radius:6px;font-size:13px;font-family:inherit;outline:none;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a)">
+        <option value="7">7 天</option>
+        <option value="30" selected>30 天</option>
+        <option value="60">60 天</option>
+        <option value="90">90 天</option>
+        <option value="180">180 天</option>
+        <option value="365">365 天</option>
+        <option value="0">永久</option>
+      </select>
+    </div>
+
     <button class="share-option" id="shareCopyLink">
       <span class="icon">🔗</span>
       <span class="text">複製連結<span class="desc">傳到 LINE，對方點開直接載入</span></span>
@@ -1067,7 +1080,7 @@
     <div id="shareExpiryInfo" style="font-size:12px;color:#999;margin:4px 0 10px;text-align:center;display:none"></div>
     <button class="share-option" id="shareExtendBtn" style="display:none">
       <span class="icon">🔄</span>
-      <span class="text">延長時限<span class="desc">重新延長 30 天（從今天起算）</span></span>
+      <span class="text">延長時限<span class="desc">以目前選擇的天數重新延長</span></span>
     </button>
 
     <button class="share-option" id="shareCopyJson">
@@ -1638,6 +1651,8 @@ function generateShortUrl(customCode) {
   var docId = customCode + '-' + random;
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
+  var days = parseInt(document.getElementById('shareExpiryDays').value) || 30;
+  var expiresAt = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
   // Delete old docs with same customCode so old URLs stop working
   fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
     var batch = fdb.batch();
@@ -1646,7 +1661,7 @@ function generateShortUrl(customCode) {
   }).catch(function(err) {
     console.warn('清理舊短網址失敗（繼續建立新網址）:', err.message);
   }).then(function() {
-    return fdb.collection('mpc-shortlinks').doc(docId).set({
+    var data = {
       title: cfg.title,
       subtitle: cfg.subtitle,
       footer: cfg.footer,
@@ -1661,20 +1676,20 @@ function generateShortUrl(customCode) {
       items: cfg.items.map(function(item) {
         return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
       }),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 天後過期
-    });
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (expiresAt) data.expiresAt = expiresAt;
+    return fdb.collection('mpc-shortlinks').doc(docId).set(data);
   }).then(function() {
     var url = window.location.origin + window.location.pathname + '?s=' + docId;
     document.getElementById('shareUrlDisplay').textContent = url;
     // Show expiry info
-    var expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    _linkExpiresAt = expiresDate;
+    _linkExpiresAt = expiresAt;
     _linkCreatedAt = new Date();
     showShareExpiryInfo();
     // Save link info to store-codes so store list shows it
     fdb.collection('mpc-store-codes').doc(customCode).update({
-      linkExpiresAt: expiresDate
+      linkExpiresAt: expiresAt
     }).catch(function() {});
     showToast('短網址已產生！', 'success');
   }).catch(function(err) {
@@ -1758,12 +1773,14 @@ function showShareExpiryInfo() {
     var elapsedDays = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
     elapsedStr = '（已使用 ' + elapsedDays + ' 天）';
   }
-  if (_linkExpiresAt) {
+  if (_linkExpiresAt !== undefined && _linkExpiresAt !== null) {
     var e = _linkExpiresAt.toDate ? _linkExpiresAt.toDate() : new Date(_linkExpiresAt);
     expiresStr = '⏳ 到期：' + fmtDate(e);
     var remaining = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
     if (remaining > 0) expiresStr += '（剩 ' + remaining + ' 天）';
     else expiresStr += '（已過期）';
+  } else if (_linkExpiresAt === null) {
+    expiresStr = '♾️ 永久有效';
   }
   infoEl.textContent = createdStr + ' ｜ ' + expiresStr + (elapsedStr ? ' ' + elapsedStr : '');
   infoEl.style.display = 'block';
@@ -1780,7 +1797,8 @@ function handleExtendLink() {
   if (!url) { showToast('請先產生網址', 'info'); return; }
   var code = config.customCode;
   if (!code) { showToast('找不到店家序號', 'error'); return; }
-  var newExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  var days = parseInt(document.getElementById('shareExpiryDays').value) || 30;
+  var newExpires = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
   fdb.collection('mpc-shortlinks').where('customCode', '==', code).get().then(function(snapshot) {
     var batch = fdb.batch();
     snapshot.forEach(function(doc) { batch.update(doc.ref, { expiresAt: newExpires }); });
@@ -1792,7 +1810,7 @@ function handleExtendLink() {
     fdb.collection('mpc-store-codes').doc(code).update({
       linkExpiresAt: newExpires
     }).catch(function() {});
-    showToast('已延長時限 30 天', 'success');
+    showToast('已延長時限 ' + (days > 0 ? days + ' 天' : '為永久'), 'success');
   }).catch(function(err) {
     showToast('延長失敗：' + err.message, 'error');
   });
@@ -2211,11 +2229,15 @@ function loadStoreCodes() {
         var days = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
         timeStr = '📅 ' + fmtDate(c) + '（已 ' + days + ' 天）';
       }
-      if (d.linkExpiresAt) {
-        var e = d.linkExpiresAt.toDate ? d.linkExpiresAt.toDate() : new Date(d.linkExpiresAt);
-        timeStr += ' ｜ ⏳ ' + fmtDate(e);
-        var rem = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
-        timeStr += '（剩 ' + rem + ' 天）';
+      if (d.linkExpiresAt !== undefined) {
+        if (d.linkExpiresAt === null) {
+          timeStr += ' ｜ ♾️ 永久有效';
+        } else {
+          var e = d.linkExpiresAt.toDate ? d.linkExpiresAt.toDate() : new Date(d.linkExpiresAt);
+          timeStr += ' ｜ ⏳ ' + fmtDate(e);
+          var rem = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
+          timeStr += '（剩 ' + rem + ' 天）';
+        }
       } else if (d.createdAt) {
         timeStr += ' ｜ 🔴 未產生連結';
       }
