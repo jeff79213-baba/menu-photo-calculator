@@ -1058,6 +1058,7 @@
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <input type="text" id="customCode" placeholder="例如：storeA" maxlength="6" style="flex:1;padding:8px 12px;border:2px solid #e0d8ce;border-radius:8px;font-size:14px;font-family:inherit;outline:none">
         <button class="btn-primary" id="shareConfig" style="flex:none;padding:8px 16px;font-size:14px">📤 產生網址</button>
+        <button class="btn-primary" id="shopShareLinkBtn" style="display:none;flex:none;padding:8px 16px;font-size:14px">🔗 分享連結</button>
       </div>
     </div>
 
@@ -1159,6 +1160,7 @@ let _firebasePassword = ''; // password loaded from Firestore, never saved to lo
 let _forcePwChange = false;
 let _linkCreatedAt = null; // timestamp from shortlink doc
 let _linkExpiresAt = null;
+let _linkRandom = ''; // random code from shortlink doc for URL reconstruction
 
 // Temporary data from import
 let importData = null;
@@ -1636,7 +1638,14 @@ function openShareModal() {
   }
   var code = config.customCode || inputCode;
   if (code) {
-    generateShortUrl(code);
+    if (isConsumerMode) {
+      // Consumer mode: just show the existing URL, don't generate new one
+      var existingUrl = window.location.origin + window.location.pathname + '?s=' + code + '-' + (_linkRandom || '');
+      document.getElementById('shareUrlDisplay').textContent = existingUrl;
+      showShareExpiryInfo();
+    } else {
+      generateShortUrl(code);
+    }
   }
 }
 
@@ -1770,6 +1779,7 @@ function loadConfigFromShortCode(code) {
     // Store expiry info for display
     _linkCreatedAt = data.createdAt || null;
     _linkExpiresAt = data.expiresAt || null;
+    _linkRandom = data.randomCode || '';
     // Load password from Firestore (if exists), not stored in localStorage
     if (data.customCode) {
       fdb.collection('mpc-store-codes').doc(data.customCode).get().then(function(storeDoc) {
@@ -2416,6 +2426,18 @@ function renderSettingsView() {
       localPw.style.display = 'block';
     }
   }
+  // Show/hide share buttons for consumer mode
+  var shareConfigBtn = document.getElementById('shareConfig');
+  var shopShareBtn = document.getElementById('shopShareLinkBtn');
+  if (shareConfigBtn && shopShareBtn) {
+    if (isConsumerMode && config.customCode) {
+      shareConfigBtn.style.display = 'none';
+      shopShareBtn.style.display = '';
+    } else {
+      shareConfigBtn.style.display = '';
+      shopShareBtn.style.display = 'none';
+    }
+  }
 }
 
 function renderSettingsItems() {
@@ -2800,6 +2822,7 @@ document.querySelector('.total-bar').addEventListener('click', function(e) {
 
 // Share modal
 document.getElementById('shareConfig').addEventListener('click', openShareModal);
+document.getElementById('shopShareLinkBtn').addEventListener('click', openShareModal);
 document.getElementById('shareCopyLink').addEventListener('click', handleShareCopyLink);
 document.getElementById('shareCopyJson').addEventListener('click', handleShareCopyJson);
 document.getElementById('shareShowQR').addEventListener('click', handleShareShowQR);
