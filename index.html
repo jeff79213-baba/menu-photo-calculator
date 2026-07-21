@@ -1079,10 +1079,6 @@
     <div id="shareExpiryInfo" style="font-size:12px;color:#999;margin:4px 0 10px;text-align:center;display:none"></div>
 
     <div id="shopOnlyQR" style="display:none">
-      <button class="share-option" id="shopUpdateBtn">
-        <span class="icon">📤</span>
-        <span class="text">更新內容<span class="desc">將目前內容上傳，網址不變</span></span>
-      </button>
       <button class="share-option" id="shareShowQR">
         <span class="icon">📱</span>
         <span class="text">顯示 QR Code<span class="desc">掃碼開啟</span></span>
@@ -2628,9 +2624,14 @@ document.getElementById('saveSettings').addEventListener('click', function() {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
   saveConfig(cfg);
+  config = cfg;
   showView('viewCalculator');
   renderMainView();
   showToast('設定已儲存', 'success');
+  // Consumer mode: also write to Firestore so guest gets latest content
+  if (isConsumerMode && config.customCode) {
+    generateShortUrl(config.customCode);
+  }
 });
 
 // Live preview: apply colors immediately when color picker changes
@@ -2860,11 +2861,6 @@ document.getElementById('shareCopyJson').addEventListener('click', handleShareCo
 document.getElementById('shareShowQR').addEventListener('click', handleShareShowQR);
 // QR for admin mode
 document.getElementById('shareShowQRAdmin').addEventListener('click', handleShareShowQRAdmin);
-document.getElementById('shopUpdateBtn').addEventListener('click', function() {
-  var code = config.customCode;
-  if (code) { generateShortUrl(code); }
-  else { showToast('找不到店家序號', 'error'); }
-});
 document.getElementById('shareCloseBtn').addEventListener('click', closeShareModal);
 document.getElementById('shareOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeShareModal();
