@@ -30,11 +30,13 @@
   .header h1 { font-size: 28px; font-weight: 800; letter-spacing: 2px; }
   .header p { font-size: 14px; opacity: .9; margin-top: 4px; }
   .gear-btn {
-    position: absolute; top: 12px; right: 16px;
+    position: absolute; top: 12px;
     background: none; border: none; font-size: 28px;
     cursor: pointer; padding: 8px; line-height: 1;
     opacity: .85; transition: transform .2s;
   }
+  .gear-btn.left { right: auto; left: 16px; }
+  .gear-btn.right { left: auto; right: 16px; }
   .gear-btn:hover { transform: rotate(30deg); opacity: 1; }
   .pw-toggle { position:absolute;right:8px;background:none;border:none;cursor:pointer;padding:4px;line-height:1;display:flex;align-items:center; }
   .pw-toggle:hover { opacity:.7; }
@@ -842,8 +844,8 @@
   <div class="header" id="mainHeader">
     <h1 id="mainTitle">載入中...</h1>
     <p id="mainSubtitle"></p>
-    <button class="gear-btn" id="btnHome" title="首頁" style="display:none">🏠</button>
-    <button class="gear-btn" id="btnSettings" title="設定">⚙️</button>
+    <button class="gear-btn left" id="btnHome" title="首頁" style="display:none">🏠</button>
+    <button class="gear-btn right" id="btnSettings" title="設定">⚙️</button>
   </div>
 
   <div class="container">
