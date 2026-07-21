@@ -1080,22 +1080,34 @@
     </button>
     <div class="share-url" id="shareUrlDisplay"></div>
     <div id="shareExpiryInfo" style="font-size:12px;color:#999;margin:4px 0 10px;text-align:center;display:none"></div>
-    <button class="share-option" id="shareExtendBtn" style="display:none">
-      <span class="icon">🔄</span>
-      <span class="text">延長時限<span class="desc">以目前選擇的天數重新延長</span></span>
+
+    <button class="share-option" id="shareCopyLink">
+      <span class="icon">🔗</span>
+      <span class="text">複製連結<span class="desc">傳到 LINE，對方點開直接載入</span></span>
     </button>
 
-    <button class="share-option" id="shareCopyJson">
-      <span class="icon">📋</span>
-      <span class="text">複製 JSON 文字<span class="desc">對方貼上即可匯入</span></span>
-    </button>
+    <div id="shopOnlyQR" style="display:none">
+      <button class="share-option" id="shareShowQR">
+        <span class="icon">📱</span>
+        <span class="text">顯示 QR Code<span class="desc">掃碼開啟</span></span>
+      </button>
+      <div class="share-qr" id="shareQRContainer" style="display:none">
+        <div id="shareQRCode"></div>
+      </div>
+    </div>
 
-    <button class="share-option" id="shareShowQR">
-      <span class="icon">📱</span>
-      <span class="text">顯示 QR Code<span class="desc">掃碼開啟</span></span>
-    </button>
-    <div class="share-qr" id="shareQRContainer" style="display:none">
-      <div id="shareQRCode"></div>
+    <div id="adminShareOptions" style="display:block">
+      <button class="share-option" id="shareCopyJson">
+        <span class="icon">📋</span>
+        <span class="text">複製 JSON 文字<span class="desc">對方貼上即可匯入</span></span>
+      </button>
+      <button class="share-option" id="shareShowQRAdmin">
+        <span class="icon">📱</span>
+        <span class="text">顯示 QR Code<span class="desc">掃碼開啟</span></span>
+      </button>
+      <div class="share-qr" id="shareQRContainerAdmin" style="display:none">
+        <div id="shareQRCodeAdmin"></div>
+      </div>
     </div>
 
     <button class="share-close-btn" id="shareCloseBtn">關閉</button>
@@ -1630,6 +1642,19 @@ function openShareModal() {
   document.getElementById('shareUrlDisplay').textContent = '';
   document.getElementById('shareQRContainer').style.display = 'none';
   document.getElementById('shareQRCode').innerHTML = '';
+  document.getElementById('shareQRContainerAdmin').style.display = 'none';
+  document.getElementById('shareQRCodeAdmin').innerHTML = '';
+
+  var shopOpts = document.getElementById('shopOnlyQR');
+  var adminOpts = document.getElementById('adminShareOptions');
+  if (isConsumerMode) {
+    shopOpts.style.display = '';
+    adminOpts.style.display = 'none';
+  } else {
+    shopOpts.style.display = 'none';
+    adminOpts.style.display = '';
+  }
+
   // Save customCode to config immediately so it persists
   var inputCode = document.getElementById('customCode').value.trim().toLowerCase();
   if (inputCode && inputCode !== config.customCode) {
@@ -1642,7 +1667,6 @@ function openShareModal() {
       // Consumer mode: just show the existing URL, don't generate new one
       var existingUrl = window.location.origin + window.location.pathname + '?s=' + code + '-' + (_linkRandom || '');
       document.getElementById('shareUrlDisplay').textContent = existingUrl;
-      showShareExpiryInfo();
     } else {
       generateShortUrl(code);
     }
@@ -1810,8 +1834,7 @@ function closeShareModal() {
 
 function showShareExpiryInfo() {
   var infoEl = document.getElementById('shareExpiryInfo');
-  var extendBtn = document.getElementById('shareExtendBtn');
-  if (!_linkCreatedAt && !_linkExpiresAt) { infoEl.style.display = 'none'; extendBtn.style.display = 'none'; return; }
+  if (!_linkCreatedAt && !_linkExpiresAt) { infoEl.style.display = 'none'; return; }
   var createdStr = '', expiresStr = '', elapsedStr = '';
   var now = Date.now();
   if (_linkCreatedAt) {
@@ -1831,51 +1854,12 @@ function showShareExpiryInfo() {
   }
   infoEl.textContent = createdStr + ' ｜ ' + expiresStr + (elapsedStr ? ' ' + elapsedStr : '');
   infoEl.style.display = 'block';
-  extendBtn.style.display = _linkExpiresAt ? 'block' : 'none';
 }
 
 function fmtDate(d) {
   return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
 }
 
-function handleExtendLink() {
-  var urlDisplay = document.getElementById('shareUrlDisplay');
-  var url = urlDisplay.textContent;
-  if (!url) { showToast('請先產生網址', 'info'); return; }
-  var code = config.customCode;
-  if (!code) { showToast('找不到店家序號', 'error'); return; }
-  // Read duration from store-codes
-  fdb.collection('mpc-store-codes').doc(code).get().then(function(storeDoc) {
-    var newExpires = null;
-    if (storeDoc.exists) {
-      var sd = storeDoc.data();
-      if (sd.linkExpireDate) {
-        newExpires = sd.linkExpireDate.toDate ? sd.linkExpireDate.toDate() : new Date(sd.linkExpireDate);
-      } else {
-        var days = sd.linkDurationDays !== undefined ? sd.linkDurationDays : 30;
-        newExpires = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
-      }
-    } else {
-      newExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    }
-    fdb.collection('mpc-shortlinks').where('customCode', '==', code).get().then(function(snapshot) {
-      var batch = fdb.batch();
-      snapshot.forEach(function(doc) { batch.update(doc.ref, { expiresAt: newExpires }); });
-      return batch.commit();
-    }).then(function() {
-      _linkExpiresAt = newExpires;
-      showShareExpiryInfo();
-      fdb.collection('mpc-store-codes').doc(code).update({
-        linkExpiresAt: newExpires
-      }).catch(function() {});
-      showToast('已延長時限 ' + (days > 0 ? days + ' 天' : '為永久'), 'success');
-    }).catch(function(err) {
-      showToast('延長失敗：' + err.message, 'error');
-    });
-  }).catch(function() {
-    showToast('讀取店家設定失敗', 'error');
-  });
-}
 
 function handleForcePwChange() {
   var newPw = prompt('首次登入，請設定新的管理員密碼（不限長度）：');
@@ -1962,6 +1946,27 @@ function handleShareShowQR() {
     if (!url) url = buildShareUrlFromConfig();
   }
   if (url) showQRCode(url);
+}
+
+function showQRCodeAdmin(url) {
+  document.getElementById('shareUrlDisplay').textContent = url;
+  var container = document.getElementById('shareQRCodeAdmin');
+  container.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url) + '" alt="QR Code">';
+  document.getElementById('shareQRContainerAdmin').style.display = 'block';
+}
+
+function handleShareShowQRAdmin() {
+  var urlDisplay = document.getElementById('shareUrlDisplay');
+  var url = urlDisplay.textContent;
+  if (url) { showQRCodeAdmin(url); return; }
+  var code = config.customCode || document.getElementById('customCode').value.trim().toLowerCase();
+  if (code) {
+    generateShortUrl(code);
+    setTimeout(function() {
+      var u = urlDisplay.textContent;
+      if (u) showQRCodeAdmin(u);
+    }, 1500);
+  }
 }
 
 function showQRCode(url) {
@@ -2825,8 +2830,10 @@ document.getElementById('shareConfig').addEventListener('click', openShareModal)
 document.getElementById('shopShareLinkBtn').addEventListener('click', openShareModal);
 document.getElementById('shareCopyLink').addEventListener('click', handleShareCopyLink);
 document.getElementById('shareCopyJson').addEventListener('click', handleShareCopyJson);
+// QR for shop mode
 document.getElementById('shareShowQR').addEventListener('click', handleShareShowQR);
-document.getElementById('shareExtendBtn').addEventListener('click', handleExtendLink);
+// QR for admin mode
+document.getElementById('shareShowQRAdmin').addEventListener('click', handleShareShowQRAdmin);
 document.getElementById('shareCloseBtn').addEventListener('click', closeShareModal);
 document.getElementById('shareOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeShareModal();
