@@ -902,12 +902,6 @@
       <button class="close-btn" id="closeSettings" title="關閉設定">✕</button>
     </div>
 
-    <div class="disclaimer">
-      <strong>⚠️ 所有設定僅儲存在你的瀏覽器</strong>（localStorage）中，<br>
-      不會上傳到任何伺服器，也不會影響其他人看到的畫面。<br>
-      清除瀏覽器快取或更換裝置後設定會遺失，<strong>建議下載設定檔備份</strong>。
-    </div>
-
     <h2>頁面文字</h2>
     <div class="form-group">
       <label for="inputTitle">頁面標題</label>
@@ -1114,12 +1108,12 @@
 // THEMES & DEFAULTS
 // ================================================================
 const THEMES = [
-  { id: "default", name: "淺芥末綠", colors: { bodyBg: "#f4f7e6", headerBg: "#b5c96a", accent: "#8aa84a", buttonBg: "#b5c96a", textColor: "#3d4a1a", cardBg: "#fff" } },
-  { id: "dark", name: "酷酷黑", colors: { bodyBg: "#121212", headerBg: "#1a1a2e", accent: "#e94560", buttonBg: "#e94560", textColor: "#e0e0e0", cardBg: "#1e1e1e" } },
-  { id: "pink", name: "粉紅", colors: { bodyBg: "#fce4ec", headerBg: "#f06292", accent: "#c2185b", buttonBg: "#f06292", textColor: "#4a1a2e", cardBg: "#fff" } },
-  { id: "blue", name: "冰藍", colors: { bodyBg: "#e3f2fd", headerBg: "#42a5f5", accent: "#1565c0", buttonBg: "#42a5f5", textColor: "#1a237e", cardBg: "#fff" } },
-  { id: "orange", name: "暖橘", colors: { bodyBg: "#fff3e0", headerBg: "#ff8a65", accent: "#bf360c", buttonBg: "#ff8a65", textColor: "#3e2723", cardBg: "#fff" } },
-  { id: "purple", name: "薰衣草", colors: { bodyBg: "#f3e5f5", headerBg: "#ab47bc", accent: "#6a1b9a", buttonBg: "#ab47bc", textColor: "#2a0a3a", cardBg: "#fff" } }
+  { id: "muji", name: "無印良品", colors: { bodyBg: "#f5f0eb", headerBg: "#8b7355", accent: "#a0896c", buttonBg: "#8b7355", textColor: "#3d3229", cardBg: "#fff" } },
+  { id: "nordic", name: "北歐簡約", colors: { bodyBg: "#f8f9fa", headerBg: "#2d3436", accent: "#74b9ff", buttonBg: "#74b9ff", textColor: "#2d3436", cardBg: "#fff" } },
+  { id: "morandi", name: "莫蘭迪粉", colors: { bodyBg: "#f5f0f0", headerBg: "#c4a4a4", accent: "#d4b8b8", buttonBg: "#c4a4a4", textColor: "#4a3d3d", cardBg: "#fff" } },
+  { id: "retro", name: "復古咖啡", colors: { bodyBg: "#f5edd6", headerBg: "#8b6f47", accent: "#c4956a", buttonBg: "#c4956a", textColor: "#3d3020", cardBg: "#fff5e6" } },
+  { id: "industrial", name: "工業灰", colors: { bodyBg: "#eceff1", headerBg: "#455a64", accent: "#ff7043", buttonBg: "#ff7043", textColor: "#263238", cardBg: "#fff" } },
+  { id: "classic", name: "經典黑白", colors: { bodyBg: "#fafafa", headerBg: "#212121", accent: "#757575", buttonBg: "#212121", textColor: "#212121", cardBg: "#fff" } }
 ];
 
 const DEFAULT_CONFIG = {
@@ -1131,7 +1125,7 @@ const DEFAULT_CONFIG = {
   emptyText: "還沒有點餐喔",
   currency: "$",
   layout: "list",
-  colors: { bodyBg: "#f4f7e6", headerBg: "#b5c96a", accent: "#8aa84a", buttonBg: "#b5c96a", textColor: "#3d4a1a", cardBg: "#fff" },
+  colors: { bodyBg: "#f5f0eb", headerBg: "#8b7355", accent: "#a0896c", buttonBg: "#8b7355", textColor: "#3d3229", cardBg: "#fff" },
   adminPassword: "0000",
   customCode: "",
   items: [
