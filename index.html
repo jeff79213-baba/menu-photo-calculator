@@ -705,16 +705,21 @@
         <input type="text" id="storeCodeInput" placeholder="序號（4~6 碼）" maxlength="6" style="flex:1 1 100px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
         <input type="text" id="storeNameInput" placeholder="店家名稱" style="flex:2 1 120px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
         <input type="text" id="storePwInput" placeholder="預設密碼" style="flex:1 1 80px;padding:8px 10px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-        <select id="storeDurationInput" style="flex:0 0 auto;padding:8px 6px;border:2px solid #e0d8ce;border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a)">
-          <option value="7">7天</option>
-          <option value="30" selected>30天</option>
-          <option value="60">60天</option>
-          <option value="90">90天</option>
-          <option value="180">180天</option>
-          <option value="365">365天</option>
+        <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:#888">
+        <span>期限：</span>
+        <select id="storeDurationInput" style="padding:6px 6px;border:2px solid #e0d8ce;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a)">
+          <option value="7">7 天</option>
+          <option value="30" selected>30 天</option>
+          <option value="60">60 天</option>
+          <option value="90">90 天</option>
+          <option value="180">180 天</option>
+          <option value="365">365 天</option>
           <option value="0">永久</option>
         </select>
-        <button class="btn-primary" id="addStoreBtn" style="flex:none;padding:8px 12px;font-size:13px">＋ 新增</button>
+        <span>或指定日期</span>
+        <input type="date" id="storeExpireDateInput" style="padding:5px 6px;border:2px solid #e0d8ce;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a)">
       </div>
     </div>
   </div>
@@ -1649,11 +1654,18 @@ function generateShortUrl(customCode) {
   if (!cfg) return;
   // Read duration from store-codes settings
   fdb.collection('mpc-store-codes').doc(customCode).get().then(function(storeDoc) {
-    var days = 30;
-    if (storeDoc.exists && storeDoc.data().linkDurationDays !== undefined) {
-      days = storeDoc.data().linkDurationDays;
+    var expiresAt = null;
+    if (storeDoc.exists) {
+      var sd = storeDoc.data();
+      if (sd.linkExpireDate) {
+        expiresAt = sd.linkExpireDate.toDate ? sd.linkExpireDate.toDate() : new Date(sd.linkExpireDate);
+      } else {
+        var days = sd.linkDurationDays !== undefined ? sd.linkDurationDays : 30;
+        expiresAt = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+      }
+    } else {
+      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
-    var expiresAt = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
     // Delete old docs with same customCode so old URLs stop working
     fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
       var batch = fdb.batch();
@@ -1824,11 +1836,18 @@ function handleExtendLink() {
   if (!code) { showToast('找不到店家序號', 'error'); return; }
   // Read duration from store-codes
   fdb.collection('mpc-store-codes').doc(code).get().then(function(storeDoc) {
-    var days = 30;
-    if (storeDoc.exists && storeDoc.data().linkDurationDays !== undefined) {
-      days = storeDoc.data().linkDurationDays;
+    var newExpires = null;
+    if (storeDoc.exists) {
+      var sd = storeDoc.data();
+      if (sd.linkExpireDate) {
+        newExpires = sd.linkExpireDate.toDate ? sd.linkExpireDate.toDate() : new Date(sd.linkExpireDate);
+      } else {
+        var days = sd.linkDurationDays !== undefined ? sd.linkDurationDays : 30;
+        newExpires = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+      }
+    } else {
+      newExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
-    var newExpires = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
     fdb.collection('mpc-shortlinks').where('customCode', '==', code).get().then(function(snapshot) {
       var batch = fdb.batch();
       snapshot.forEach(function(doc) { batch.update(doc.ref, { expiresAt: newExpires }); });
@@ -2274,16 +2293,43 @@ function loadStoreCodes() {
         timeStr += ' ｜ 🔴 未產生連結';
       }
       // Duration setting
-      var durStr = '期限設定：' + (d.linkDurationDays === 0 ? '永久' : (d.linkDurationDays || 30) + ' 天');
+      var durStr = '期限設定：';
+      if (d.linkExpireDate) {
+        var ed = d.linkExpireDate.toDate ? d.linkExpireDate.toDate() : new Date(d.linkExpireDate);
+        durStr += fmtDate(ed) + ' 到期';
+      } else {
+        durStr += d.linkDurationDays === 0 ? '永久' : (d.linkDurationDays || 30) + ' 天';
+      }
       row.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button></div>' + (timeStr ? '<div style="font-size:11px;color:#888;margin-top:2px;padding-left:4px">' + timeStr + '</div>' : '') + '<div style="font-size:11px;color:#888;margin-top:1px;padding-left:4px"><span class="edit-dur-btn" data-id="' + doc.id + '" style="cursor:pointer;border-bottom:1px dashed #aaa">' + durStr + ' ✏️</span></div>';
       list.appendChild(row);
       row.querySelector('.edit-dur-btn').addEventListener('click', function() {
         var sid = this.dataset.id;
-        var input = prompt('請輸入新期限天數（0 = 永久，30 = 30 天）：', d.linkDurationDays !== undefined ? String(d.linkDurationDays) : '30');
+        var input = prompt('輸入天數（0=永久，30=30天）或日期（例如2026/12/31）：', d.linkDurationDays !== undefined ? String(d.linkDurationDays) : (d.linkExpireDate ? fmtDate(d.linkExpireDate.toDate ? d.linkExpireDate.toDate() : new Date(d.linkExpireDate)) : '30'));
         if (input === null) return;
+        // Check if it's a date format (contains / or -)
+        if (input.indexOf('/') !== -1 || input.indexOf('-') !== -1) {
+          var parts = input.split(/[\/\-]/);
+          if (parts.length === 3) {
+            var expireDate = new Date(parts[0] + '/' + parts[1] + '/' + parts[2] + ' 23:59:59');
+            if (!isNaN(expireDate.getTime())) {
+              fdb.collection('mpc-store-codes').doc(sid).update({
+                linkDurationDays: firebase.firestore.FieldValue.delete(),
+                linkExpireDate: expireDate
+              }).then(function() {
+                showToast('到期日已更新為 ' + fmtDate(expireDate), 'success');
+                loadStoreCodes();
+              }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
+              return;
+            }
+          }
+          showToast('日期格式錯誤，請用 2026/12/31', 'error'); return;
+        }
         var newDur = parseInt(input);
-        if (isNaN(newDur) || newDur < 0) { showToast('請輸入有效天數（0 或正整數）', 'error'); return; }
-        fdb.collection('mpc-store-codes').doc(sid).update({ linkDurationDays: newDur }).then(function() {
+        if (isNaN(newDur) || newDur < 0) { showToast('請輸入有效天數（0 或正整數）或日期', 'error'); return; }
+        fdb.collection('mpc-store-codes').doc(sid).update({
+          linkDurationDays: newDur,
+          linkExpireDate: firebase.firestore.FieldValue.delete()
+        }).then(function() {
           showToast('期限已更新為 ' + (newDur === 0 ? '永久' : newDur + ' 天'), 'success');
           loadStoreCodes();
         }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
@@ -2303,18 +2349,24 @@ document.getElementById('addStoreBtn').addEventListener('click', function() {
   var name = document.getElementById('storeNameInput').value.trim();
   var pw = document.getElementById('storePwInput').value.trim() || '0000';
   var dur = parseInt(document.getElementById('storeDurationInput').value) || 30;
+  var expireDateVal = document.getElementById('storeExpireDateInput').value;
   if (!code || code.length < 4) { showToast('序號至少 4 碼', 'info'); return; }
   if (!name) { showToast('請輸入店家名稱', 'info'); return; }
   document.getElementById('storeCodeInput').value = '';
   document.getElementById('storeNameInput').value = '';
   document.getElementById('storePwInput').value = '';
-  fdb.collection('mpc-store-codes').doc(code).set({
+  document.getElementById('storeExpireDateInput').value = '';
+  var storeData = {
     shopName: name,
     password: pw,
     linkDurationDays: dur,
     forcePasswordChange: true,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(function() {
+  };
+  if (expireDateVal) {
+    storeData.linkExpireDate = new Date(expireDateVal + 'T23:59:59');
+  }
+  fdb.collection('mpc-store-codes').doc(code).set(storeData).then(function() {
     showToast('已建立序號 ' + code, 'success');
     loadStoreCodes();
   }).catch(function(err) { showToast('建立失敗：' + err.message, 'error'); });
