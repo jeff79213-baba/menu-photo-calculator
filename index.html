@@ -1657,6 +1657,9 @@ function openShareModal() {
       var existingUrl = window.location.origin + window.location.pathname + '?s=' + code + '-' + (_linkRandom || '');
       document.getElementById('shareUrlDisplay').textContent = existingUrl;
     } else {
+      // Save form state before generating URL
+      var formCfg = gatherSettingsFromForm();
+      if (formCfg) { saveConfig(formCfg); config = formCfg; }
       generateShortUrl(code);
     }
   }
