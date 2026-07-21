@@ -842,6 +842,7 @@
   <div class="header" id="mainHeader">
     <h1 id="mainTitle">載入中...</h1>
     <p id="mainSubtitle"></p>
+    <button class="gear-btn" id="btnHome" title="首頁" style="display:none">🏠</button>
     <button class="gear-btn" id="btnSettings" title="設定">⚙️</button>
   </div>
 
@@ -1026,7 +1027,7 @@
       <input type="file" id="fileInput" accept=".json" style="display:none">
     </div>
 
-    <div class="paste-area">
+    <div class="paste-area" id="jsonPasteSection">
       <div style="font-size:12px;color:#999;margin-bottom:6px;">📋 貼上 JSON 匯入設定（匯入後更改全部品項）</div>
       <textarea id="jsonPasteInput" placeholder="將 JSON 貼在這裡..."></textarea>
       <div class="paste-actions" style="margin-top:8px">
@@ -1035,7 +1036,7 @@
       </div>
     </div>
 
-    <div class="text-import-area">
+    <div class="text-import-area" id="textImportSection">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">📋 文字匯入品項 <span style="font-weight:400;font-size:12px;color:#e85d2c;">注意［匯入品項］會覆蓋全部內容</span></div>
       <div style="font-size:12px;color:#999;margin-bottom:6px;">每行一筆，格式 <code>品名-單位-價格</code>，可加分類 <code>品名-單位-價格-分類</code></div>
       <div style="font-size:12px;color:#999;margin-bottom:6px;">例如：<code id="textImportExample">益生菌-盒-1980</code>　<code id="textImportExampleCat">串燒-串-45-串燒</code></div>
@@ -1076,6 +1077,10 @@
     <div id="shareExpiryInfo" style="font-size:12px;color:#999;margin:4px 0 10px;text-align:center;display:none"></div>
 
     <div id="shopOnlyQR" style="display:none">
+      <button class="share-option" id="shopUpdateBtn">
+        <span class="icon">📤</span>
+        <span class="text">更新內容<span class="desc">將目前內容上傳，網址不變</span></span>
+      </button>
       <button class="share-option" id="shareShowQR">
         <span class="icon">📱</span>
         <span class="text">顯示 QR Code<span class="desc">掃碼開啟</span></span>
@@ -1303,6 +1308,7 @@ function renderMainView() {
   var showAdmin = isAdminMode;
   document.getElementById('btnSettings').style.display = showAdmin ? '' : 'none';
   document.querySelector('.local-notice').style.display = showAdmin ? '' : 'none';
+  document.getElementById('btnHome').style.display = (!isConsumerMode && isAdminMode) ? '' : 'none';
 
   applyColors(config.colors);
 
@@ -1673,8 +1679,6 @@ function generateRandomCode() {
 }
 
 function generateShortUrl(customCode) {
-  var random = generateRandomCode();
-  var docId = customCode + '-' + random;
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
   // Read duration from store-codes settings
@@ -1691,51 +1695,68 @@ function generateShortUrl(customCode) {
     } else {
       expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
-    // Delete old docs with same customCode so old URLs stop working
+    // Find existing doc by customCode to update in-place (keep same URL)
     fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
-      var batch = fdb.batch();
-      snapshot.forEach(function(doc) { batch.delete(doc.ref); });
-      return batch.commit();
-    }).catch(function(err) {
-      console.warn('清理舊短網址失敗（繼續建立新網址）:', err.message);
-    }).then(function() {
       var data = {
-        title: cfg.title,
-        subtitle: cfg.subtitle,
-        footer: cfg.footer,
-        totalLabel: cfg.totalLabel,
-        resetText: cfg.resetText,
-        emptyText: cfg.emptyText,
-        currency: cfg.currency,
-        layout: cfg.layout,
-        colors: cfg.colors,
+        title: cfg.title, subtitle: cfg.subtitle, footer: cfg.footer,
+        totalLabel: cfg.totalLabel, resetText: cfg.resetText, emptyText: cfg.emptyText,
+        currency: cfg.currency, layout: cfg.layout, colors: cfg.colors,
         customCode: customCode,
-        randomCode: random,
         items: cfg.items.map(function(item) {
           return { id: item.id, name: item.name, price: item.price, unit: item.unit, category: item.category };
         }),
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
       if (expiresAt) data.expiresAt = expiresAt;
-      return fdb.collection('mpc-shortlinks').doc(docId).set(data);
-    }).then(function() {
-      var url = window.location.origin + window.location.pathname + '?s=' + docId;
-      document.getElementById('shareUrlDisplay').textContent = url;
-      _linkExpiresAt = expiresAt;
-      _linkCreatedAt = new Date();
-      showShareExpiryInfo();
-      fdb.collection('mpc-store-codes').doc(customCode).update({
-        linkExpiresAt: expiresAt
-      }).catch(function() {});
-      showToast('短網址已產生！', 'success');
+
+      if (snapshot.size > 0) {
+        // Existing doc found → update in-place, keep same URL
+        var existingDoc = snapshot.docs[0];
+        var existingData = existingDoc.data();
+        data.randomCode = existingData.randomCode;
+        data.createdAt = existingData.createdAt; // preserve original creation time
+        existingDoc.ref.set(data).then(function() {
+          var url = window.location.origin + window.location.pathname + '?s=' + existingDoc.id;
+          document.getElementById('shareUrlDisplay').textContent = url;
+          _linkExpiresAt = expiresAt;
+          _linkCreatedAt = existingData.createdAt;
+          showShareExpiryInfo();
+          fdb.collection('mpc-store-codes').doc(customCode).update({
+            linkExpiresAt: expiresAt
+          }).catch(function() {});
+          showToast('內容已更新，網址不變！', 'success');
+        }).catch(function(err) {
+          showToast('更新失敗：' + err.message, 'error');
+        });
+      } else {
+        // No existing doc → create new one
+        var random = generateRandomCode();
+        var docId = customCode + '-' + random;
+        data.randomCode = random;
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        fdb.collection('mpc-shortlinks').doc(docId).set(data).then(function() {
+          var url = window.location.origin + window.location.pathname + '?s=' + docId;
+          document.getElementById('shareUrlDisplay').textContent = url;
+          _linkExpiresAt = expiresAt;
+          _linkCreatedAt = new Date();
+          showShareExpiryInfo();
+          fdb.collection('mpc-store-codes').doc(customCode).update({
+            linkExpiresAt: expiresAt
+          }).catch(function() {});
+          showToast('短網址已產生！', 'success');
+        }).catch(function(err) {
+          showToast('上傳失敗：' + err.message, 'error');
+        });
+      }
     }).catch(function(err) {
-      showToast('上傳失敗：' + err.message, 'error');
+      showToast('查詢短網址失敗：' + err.message, 'error');
     });
   }).catch(function() {
     // Fallback if store-codes read fails
     var expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     showToast('無法讀取店家設定，使用預設 30 天', 'info');
-    // (simplified fallback - reuse same logic)
+    var random = generateRandomCode();
+    var docId = customCode + '-' + random;
     fdb.collection('mpc-shortlinks').doc(docId).set({
       title: cfg.title, subtitle: cfg.subtitle, footer: cfg.footer,
       totalLabel: cfg.totalLabel, resetText: cfg.resetText, emptyText: cfg.emptyText,
@@ -2435,6 +2456,13 @@ function renderSettingsView() {
       shopShareBtn.style.display = 'none';
     }
   }
+  // Hide import sections for consumer mode
+  var jsonSection = document.getElementById('jsonPasteSection');
+  var textSection = document.getElementById('textImportSection');
+  if (jsonSection && textSection) {
+    jsonSection.style.display = isConsumerMode ? 'none' : '';
+    textSection.style.display = isConsumerMode ? 'none' : '';
+  }
 }
 
 function renderSettingsItems() {
@@ -2764,6 +2792,10 @@ document.getElementById('btnSettings').addEventListener('click', function() {
   showView('viewSettings');
 });
 
+document.getElementById('btnHome').addEventListener('click', function() {
+  showView('viewHome');
+});
+
 document.getElementById('closeSettings').addEventListener('click', function() {
   var cfg = gatherSettingsFromForm();
   if (cfg) { saveConfig(cfg); config = cfg; }
@@ -2826,6 +2858,11 @@ document.getElementById('shareCopyJson').addEventListener('click', handleShareCo
 document.getElementById('shareShowQR').addEventListener('click', handleShareShowQR);
 // QR for admin mode
 document.getElementById('shareShowQRAdmin').addEventListener('click', handleShareShowQRAdmin);
+document.getElementById('shopUpdateBtn').addEventListener('click', function() {
+  var code = config.customCode;
+  if (code) { generateShortUrl(code); }
+  else { showToast('找不到店家序號', 'error'); }
+});
 document.getElementById('shareCloseBtn').addEventListener('click', closeShareModal);
 document.getElementById('shareOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeShareModal();
