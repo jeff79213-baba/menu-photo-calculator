@@ -712,12 +712,11 @@
       <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:#888">
         <span>期限：</span>
         <select id="storeDurationInput" style="padding:6px 6px;border:2px solid #e0d8ce;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:var(--card-bg,#fff);color:var(--text-color,#3d2b1a)">
-          <option value="7">7 天</option>
-          <option value="30" selected>30 天</option>
-          <option value="60">60 天</option>
+          <option value="365" selected>365 天（一年）</option>
+          <option value="30">30 天</option>
           <option value="90">90 天</option>
           <option value="180">180 天</option>
-          <option value="365">365 天</option>
+          <option value="7">7 天</option>
           <option value="0">永久</option>
         </select>
         <span>或指定日期</span>
@@ -1676,22 +1675,57 @@ function generateRandomCode() {
   return result;
 }
 
+// 取得店家的授權到期日（單一權威來源）。回傳 Date 或 null（永久）。
+// 新資料：讀 planExpiry。舊資料：退回 linkExpireDate / linkExpiresAt / createdAt+天數。
+function getPlanExpiry(sd) {
+  if (!sd) return null;
+  if (sd.planExpiry !== undefined) {
+    if (!sd.planExpiry) return null;
+    return sd.planExpiry.toDate ? sd.planExpiry.toDate() : new Date(sd.planExpiry);
+  }
+  var src = sd.linkExpireDate || (sd.linkExpiresAt !== undefined ? sd.linkExpiresAt : undefined);
+  if (src !== undefined) {
+    if (!src) return null;
+    return src.toDate ? src.toDate() : new Date(src);
+  }
+  if (sd.linkDurationDays === 0) return null;
+  var base = sd.createdAt ? (sd.createdAt.toDate ? sd.createdAt.toDate() : new Date(sd.createdAt)) : new Date();
+  var days = sd.linkDurationDays !== undefined ? sd.linkDurationDays : 365;
+  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+// 管理員加期後，同步更新該店家短網址的到期日，讓客人端立即生效（不需重新產生網址）
+function syncShortlinkExpiry(customCode, planExpiry) {
+  fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
+    snapshot.forEach(function(sdoc) {
+      sdoc.ref.update({ expiresAt: planExpiry }).catch(function() {});
+    });
+  }).catch(function() {});
+}
+
+// 設定/加期：寫入固定的 planExpiry（null = 永久），並同步短網址
+function applyPlanExpiry(sid, planExpiry) {
+  fdb.collection('mpc-store-codes').doc(sid).update({
+    planExpiry: planExpiry,
+    linkDurationDays: firebase.firestore.FieldValue.delete(),
+    linkExpireDate: firebase.firestore.FieldValue.delete()
+  }).then(function() {
+    syncShortlinkExpiry(sid, planExpiry);
+    showToast(planExpiry ? '到期日已更新為 ' + fmtDate(planExpiry) : '已設為永久有效', 'success');
+    loadStoreCodes();
+  }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
+}
+
 function generateShortUrl(customCode) {
   var cfg = gatherSettingsFromForm();
   if (!cfg) return;
-  // Read duration from store-codes settings
+  // 到期日一律採用店家授權主檔的固定 planExpiry（不再依「現在」重算，避免店家儲存設定時自我續約）
   fdb.collection('mpc-store-codes').doc(customCode).get().then(function(storeDoc) {
     var expiresAt = null;
     if (storeDoc.exists) {
-      var sd = storeDoc.data();
-      if (sd.linkExpireDate) {
-        expiresAt = sd.linkExpireDate.toDate ? sd.linkExpireDate.toDate() : new Date(sd.linkExpireDate);
-      } else {
-        var days = sd.linkDurationDays !== undefined ? sd.linkDurationDays : 30;
-        expiresAt = days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
-      }
+      expiresAt = getPlanExpiry(storeDoc.data());
     } else {
-      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
     }
     // Find existing doc by customCode to update in-place (keep same URL)
     fdb.collection('mpc-shortlinks').where('customCode', '==', customCode).get().then(function(snapshot) {
@@ -1719,9 +1753,6 @@ function generateShortUrl(customCode) {
           _linkExpiresAt = expiresAt;
           _linkCreatedAt = existingData.createdAt;
           showShareExpiryInfo();
-          fdb.collection('mpc-store-codes').doc(customCode).update({
-            linkExpiresAt: expiresAt
-          }).catch(function() {});
           showToast('內容已更新，網址不變！', 'success');
         }).catch(function(err) {
           showToast('更新失敗：' + err.message, 'error');
@@ -1738,9 +1769,6 @@ function generateShortUrl(customCode) {
           _linkExpiresAt = expiresAt;
           _linkCreatedAt = new Date();
           showShareExpiryInfo();
-          fdb.collection('mpc-store-codes').doc(customCode).update({
-            linkExpiresAt: expiresAt
-          }).catch(function() {});
           showToast('短網址已產生！', 'success');
         }).catch(function(err) {
           showToast('上傳失敗：' + err.message, 'error');
@@ -1751,8 +1779,8 @@ function generateShortUrl(customCode) {
     });
   }).catch(function() {
     // Fallback if store-codes read fails
-    var expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    showToast('無法讀取店家設定，使用預設 30 天', 'info');
+    var expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    showToast('無法讀取店家設定，使用預設 365 天', 'info');
     var random = generateRandomCode();
     var docId = customCode + '-' + random;
     fdb.collection('mpc-shortlinks').doc(docId).set({
@@ -1771,7 +1799,7 @@ function generateShortUrl(customCode) {
       _linkExpiresAt = expiresAt;
       _linkCreatedAt = new Date();
       showShareExpiryInfo();
-      showToast('短網址已產生！（預設 30 天）', 'success');
+      showToast('短網址已產生！（預設 365 天）', 'success');
     }).catch(function(err) {
       showToast('上傳失敗：' + err.message, 'error');
     });
@@ -1791,7 +1819,7 @@ function loadConfigFromShortCode(code) {
     if (data.expiresAt) {
       var expiresAt = data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
       if (Date.now() > expiresAt.getTime()) {
-        showToast('此連結已過期，請向店家索取新網址', 'error');
+        showToast('授權已到期，請聯繫管理員續約', 'error');
         setTimeout(function() { showView('viewHome'); }, 1500);
         return;
       }
@@ -2306,59 +2334,36 @@ function loadStoreCodes() {
         var days = Math.floor((now - c.getTime()) / (24 * 60 * 60 * 1000));
         timeStr = '📅 ' + fmtDate(c) + '（已 ' + days + ' 天）';
       }
-      if (d.linkExpiresAt !== undefined) {
-        if (d.linkExpiresAt === null) {
-          timeStr += ' ｜ ♾️ 永久有效';
-        } else {
-          var e = d.linkExpiresAt.toDate ? d.linkExpiresAt.toDate() : new Date(d.linkExpiresAt);
-          timeStr += ' ｜ ⏳ ' + fmtDate(e);
-          var rem = Math.ceil((e.getTime() - now) / (24 * 60 * 60 * 1000));
-          timeStr += '（剩 ' + rem + ' 天）';
-        }
-      } else if (d.createdAt) {
-        timeStr += ' ｜ 🔴 未產生連結';
+      var pe = getPlanExpiry(d);
+      if (pe === null) {
+        timeStr += ' ｜ ♾️ 永久有效';
+      } else {
+        timeStr += ' ｜ ⏳ ' + fmtDate(pe);
+        var rem = Math.ceil((pe.getTime() - now) / (24 * 60 * 60 * 1000));
+        timeStr += rem > 0 ? '（剩 ' + rem + ' 天）' : '（已過期）';
       }
       // Duration setting
-      var durStr = '期限設定：';
-      if (d.linkExpireDate) {
-        var ed = d.linkExpireDate.toDate ? d.linkExpireDate.toDate() : new Date(d.linkExpireDate);
-        durStr += fmtDate(ed) + ' 到期';
-      } else {
-        durStr += d.linkDurationDays === 0 ? '永久' : (d.linkDurationDays || 30) + ' 天';
-      }
+      var durStr = '到期：' + (pe === null ? '永久' : fmtDate(pe));
       row.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button></div>' + (timeStr ? '<div style="font-size:11px;color:#888;margin-top:2px;padding-left:4px">' + timeStr + '</div>' : '') + '<div style="font-size:11px;color:#888;margin-top:1px;padding-left:4px"><span class="edit-dur-btn" data-id="' + doc.id + '" style="cursor:pointer;border-bottom:1px dashed #aaa">' + durStr + ' ✏️</span></div>';
       list.appendChild(row);
       row.querySelector('.edit-dur-btn').addEventListener('click', function() {
         var sid = this.dataset.id;
-        var input = prompt('輸入天數（0=永久，30=30天）或日期（例如2026/12/31）：', d.linkDurationDays !== undefined ? String(d.linkDurationDays) : (d.linkExpireDate ? fmtDate(d.linkExpireDate.toDate ? d.linkExpireDate.toDate() : new Date(d.linkExpireDate)) : '30'));
+        var cur = getPlanExpiry(d);
+        var input = prompt('加期：輸入要增加的天數（例如 365），或指定到期日（例如 2026/12/31）；輸入 0 = 永久。', cur === null ? '0' : fmtDate(cur));
         if (input === null) return;
-        // Check if it's a date format (contains / or -)
         if (input.indexOf('/') !== -1 || input.indexOf('-') !== -1) {
           var parts = input.split(/[\/\-]/);
-          if (parts.length === 3) {
-            var expireDate = new Date(parts[0] + '/' + parts[1] + '/' + parts[2] + ' 23:59:59');
-            if (!isNaN(expireDate.getTime())) {
-              fdb.collection('mpc-store-codes').doc(sid).update({
-                linkDurationDays: firebase.firestore.FieldValue.delete(),
-                linkExpireDate: expireDate
-              }).then(function() {
-                showToast('到期日已更新為 ' + fmtDate(expireDate), 'success');
-                loadStoreCodes();
-              }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
-              return;
-            }
-          }
-          showToast('日期格式錯誤，請用 2026/12/31', 'error'); return;
+          if (parts.length !== 3) { showToast('日期格式錯誤，請用 2026/12/31', 'error'); return; }
+          var newDate = new Date(parts[0] + '/' + parts[1] + '/' + parts[2] + ' 23:59:59');
+          if (isNaN(newDate.getTime())) { showToast('日期格式錯誤，請用 2026/12/31', 'error'); return; }
+          applyPlanExpiry(sid, newDate);
+          return;
         }
-        var newDur = parseInt(input);
-        if (isNaN(newDur) || newDur < 0) { showToast('請輸入有效天數（0 或正整數）或日期', 'error'); return; }
-        fdb.collection('mpc-store-codes').doc(sid).update({
-          linkDurationDays: newDur,
-          linkExpireDate: firebase.firestore.FieldValue.delete()
-        }).then(function() {
-          showToast('期限已更新為 ' + (newDur === 0 ? '永久' : newDur + ' 天'), 'success');
-          loadStoreCodes();
-        }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
+        var addDays = parseInt(input);
+        if (isNaN(addDays) || addDays < 0) { showToast('請輸入有效天數（0 = 永久）或日期', 'error'); return; }
+        if (addDays === 0) { applyPlanExpiry(sid, null); return; }
+        var base = (cur && cur.getTime() > Date.now()) ? cur.getTime() : Date.now();
+        applyPlanExpiry(sid, new Date(base + addDays * 24 * 60 * 60 * 1000));
       });
       list.appendChild(row);
       row.querySelector('.del-store-btn').addEventListener('click', function() {
@@ -2374,7 +2379,9 @@ document.getElementById('addStoreBtn').addEventListener('click', function() {
   var code = document.getElementById('storeCodeInput').value.trim().toLowerCase();
   var name = document.getElementById('storeNameInput').value.trim();
   var pw = document.getElementById('storePwInput').value.trim() || '0000';
-  var dur = parseInt(document.getElementById('storeDurationInput').value) || 30;
+  var durVal = document.getElementById('storeDurationInput').value;
+  var dur = durVal === '' ? 365 : parseInt(durVal);
+  if (isNaN(dur)) dur = 365;
   var expireDateVal = document.getElementById('storeExpireDateInput').value;
   if (!code || code.length < 4) { showToast('序號至少 4 碼', 'info'); return; }
   if (!name) { showToast('請輸入店家名稱', 'info'); return; }
@@ -2390,7 +2397,11 @@ document.getElementById('addStoreBtn').addEventListener('click', function() {
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   if (expireDateVal) {
-    storeData.linkExpireDate = new Date(expireDateVal + 'T23:59:59');
+    storeData.planExpiry = new Date(expireDateVal + 'T23:59:59');
+  } else if (dur === 0) {
+    storeData.planExpiry = null;
+  } else {
+    storeData.planExpiry = new Date(Date.now() + dur * 24 * 60 * 60 * 1000);
   }
   fdb.collection('mpc-store-codes').doc(code).set(storeData).then(function() {
     showToast('已建立序號 ' + code, 'success');
