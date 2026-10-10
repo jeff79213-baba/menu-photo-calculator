@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>AI 菜單辨識計算機</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
@@ -1149,6 +1150,13 @@ firebase.initializeApp({
   appId: "1:741268730945:web:503cf0dfab0e9100b042c0"
 });
 var fdb = firebase.firestore();
+// 匿名登入：Firestore 規則要求 request.auth != null，登入後才能讀寫 mpc-*
+var _authReady = firebase.auth().signInAnonymously().then(function() {
+  return true;
+}).catch(function(err) {
+  console.warn('匿名登入失敗:', err && err.message);
+  return false;
+});
 
 // ================================================================
 // STATE
@@ -2901,7 +2909,7 @@ document.getElementById('orderDetailOverlay').addEventListener('click', function
   if (shortCode) {
     document.title = '載入共享菜單…';
     showView('viewCalculator');
-    loadConfigFromShortCode(shortCode);
+    _authReady.then(function() { loadConfigFromShortCode(shortCode); });
     return;
   }
 
