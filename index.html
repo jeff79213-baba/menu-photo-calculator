@@ -2375,8 +2375,15 @@ function loadStoreCodes() {
       });
       list.appendChild(row);
       row.querySelector('.del-store-btn').addEventListener('click', function() {
-        if (confirm('確定刪除序號「' + doc.id + '」？此動作無法復原。')) {
-          fdb.collection('mpc-store-codes').doc(doc.id).delete().then(function() { loadStoreCodes(); });
+        if (confirm('確定刪除序號「' + doc.id + '」？\n已分享給客人的網址也會一起失效，無法復原。')) {
+          fdb.collection('mpc-shortlinks').where('customCode', '==', doc.id).get().then(function(snap) {
+            var tasks = snap.docs.map(function(sd) { return sd.ref.delete(); });
+            tasks.push(fdb.collection('mpc-store-codes').doc(doc.id).delete());
+            return Promise.all(tasks);
+          }).then(function() {
+            loadStoreCodes();
+            showToast('已刪除序號與對應網址', 'success');
+          }).catch(function(err) { showToast('刪除失敗：' + err.message, 'error'); });
         }
       });
     });
