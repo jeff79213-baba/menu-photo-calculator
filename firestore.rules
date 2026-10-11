@@ -1,0 +1,77 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════
+// 菜單拍照計算機 — Firestore 安全規則
+//
+// 【目前生效版本】＝ 維持現狀，但把行為明確寫出來：
+//   App 會自動匿名登入，因此任何開啟頁面的人都能讀寫 mpc-* 兩個集合。
+//
+//   ⚠️ 這代表懂技術的人可以直接呼叫 Firestore，把自己的
+//      planExpiry 改成 2099、或把 status 改回 active。
+//      這是販售前必須處理的紅旗 → 見「授權系統變更文件.md」第 7 節。
+//
+// 【鎖定版本】在最下方註解區，切換步驟見「部署清單.md」第 4 節。
+// ════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // 授權主檔（店家序號、到期日、停用狀態、打卡記錄）
+    match /mpc-store-codes/{code} {
+      allow read, write: if signedIn();
+    }
+
+    // 菜單內容（分享出去的 ?s= 連結指向這裡）
+    match /mpc-shortlinks/{id} {
+      allow read, write: if signedIn();
+    }
+
+    // 其他一律拒絕
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   鎖定版本（販售前切換）
+
+   前提（三件事都做完再套用，否則會擋到你自己）：
+   1. Firebase Console → Authentication 建立你的管理員帳號（電子郵件／密碼）。
+   2. 把下面的 ADMIN_EMAIL 改成你的信箱。
+   3. 前端要有管理員登入（目前沒有）＋ 客人端改走 Cloud Function 或公開投影，
+      否則客人端讀不到 mpc-store-codes，會全部顯示「需要連線才能開通」。
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email in ['ADMIN_EMAIL'];
+    }
+
+    // 授權主檔：只有管理員能讀寫（權威期限藏在這裡）
+    match /mpc-store-codes/{code} {
+      allow read, write: if isAdmin();
+    }
+
+    // 菜單內容：公開可讀（客人要能開連結），只有管理員能寫
+    match /mpc-shortlinks/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+   更完整的做法（推薦）：
+   - checkin({ code }) Cloud Function：由伺服器判斷 status / planExpiry、
+     順手寫 lastSeenAt / openCount、回傳 leaseUntil 與簽章，而且不吐密碼。
+   - 密碼改存雜湊，前端不再讀明文密碼。
+   ────────────────────────────────────────────────────────────── */

@@ -692,6 +692,21 @@
 </div>
 
 <!-- ============================================================
+     VIEW: BLOCKED（授權／離線租期未通過）
+     ============================================================ -->
+<div id="viewBlocked" class="view">
+  <div class="home-header">
+    <h1>無法使用</h1>
+    <p>菜單授權檢查未通過</p>
+  </div>
+  <div style="max-width:420px;margin:0 auto;padding:24px 20px;text-align:center">
+    <div id="blockedMsg" style="font-size:17px;font-weight:700;margin-bottom:8px"></div>
+    <div id="blockedHint" style="font-size:13px;color:#888;margin-bottom:22px;line-height:1.7"></div>
+    <button class="btn-primary" id="blockedRetry" style="padding:10px 22px;font-size:14px">重新檢查</button>
+  </div>
+</div>
+
+<!-- ============================================================
      VIEW: MANAGE STORE
      ============================================================ -->
 <div id="viewManageStore" class="view">
@@ -1157,6 +1172,117 @@ var _authReady = firebase.auth().signInAnonymously().then(function() {
   console.warn('匿名登入失敗:', err && err.message);
   return false;
 });
+
+// ================================================================
+// 授權：離線通行證（mpc-license）
+// ----------------------------------------------------------------
+// 規則：每次「成功連網」載入菜單時發／更新一張通行證
+//       leaseUntil = min(授權到期日, 現在 + OFFLINE_GRACE_DAYS 天)
+//       離線時只讀不續期 → 店家一斷網，倒數就自己開始跑
+// ================================================================
+var OFFLINE_GRACE_DAYS = 30;                            // 離線寬限期（天），要調整就改這裡
+var LICENSE_KEY = 'mpc-license';
+var LICENSE_BAK_KEY = 'mpc-license-bak';                // 多存一份，降低被誤清的機率
+var MENU_CACHE_PREFIX = 'mpc-menu-';
+var DAY_MS = 24 * 60 * 60 * 1000;
+var CLOCK_ROLLBACK_TOLERANCE_MS = 2 * 60 * 60 * 1000;   // 容忍 2 小時的時鐘誤差
+
+function readLicense() {
+  try {
+    var raw = localStorage.getItem(LICENSE_KEY) || localStorage.getItem(LICENSE_BAK_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function writeLicense(lic) {
+  try { localStorage.setItem(LICENSE_KEY, JSON.stringify(lic)); } catch (e) {}
+  try { localStorage.setItem(LICENSE_BAK_KEY, JSON.stringify(lic)); } catch (e) {}
+}
+
+// 校正後的「現在」：offsetMs = 伺服器時間 − 本機時間（客戶電腦時間不準也能用）
+function licenseNow(lic) {
+  return Date.now() + ((lic && lic.offsetMs) || 0);
+}
+
+// 檢查通行證 → { ok, reason, lic, daysLeft }
+function evaluateLicense(code) {
+  var lic = readLicense();
+  if (!lic || !lic.leaseUntil) return { ok: false, reason: 'nolicense' };
+  if (code && lic.code && lic.code !== code) return { ok: false, reason: 'nolicense' };
+  var now = licenseNow(lic);
+  if (lic.maxSeen && now < lic.maxSeen - CLOCK_ROLLBACK_TOLERANCE_MS) {
+    return { ok: false, reason: 'clock_back' };          // 系統時間被往回調
+  }
+  if (now > lic.leaseUntil) return { ok: false, reason: 'lease_expired' };
+  return { ok: true, lic: lic, now: now, daysLeft: Math.ceil((lic.leaseUntil - now) / DAY_MS) };
+}
+
+// 記錄「看過的最大時間」，用來偵測時鐘倒退
+function touchLicense() {
+  var lic = readLicense();
+  if (!lic) return;
+  var now = licenseNow(lic);
+  if (!lic.maxSeen || now > lic.maxSeen) { lic.maxSeen = now; writeLicense(lic); }
+}
+
+// 發／續通行證（只在連網成功時呼叫）
+function issueLicense(code, planExpiryMs, serverNowMs) {
+  var prev = readLicense();
+  var offsetMs = (typeof serverNowMs === 'number' && serverNowMs > 0)
+    ? (serverNowMs - Date.now())
+    : ((prev && prev.offsetMs) || 0);
+  var now = Date.now() + offsetMs;
+  var leaseUntil = now + OFFLINE_GRACE_DAYS * DAY_MS;
+  if (planExpiryMs && planExpiryMs < leaseUntil) leaseUntil = planExpiryMs;
+  writeLicense({
+    code: code,
+    leaseUntil: leaseUntil,
+    planExpiry: planExpiryMs || null,
+    offsetMs: offsetMs,
+    maxSeen: Math.max((prev && prev.maxSeen) || 0, now),
+    issuedAt: now
+  });
+}
+
+// 菜單快取（離線時唯一的資料來源）
+function cacheMenu(code, cfg, randomCode, createdAt, expiresAt) {
+  try {
+    localStorage.setItem(MENU_CACHE_PREFIX + code, JSON.stringify({
+      cfg: cfg,
+      customCode: cfg.customCode || '',
+      randomCode: randomCode || '',
+      createdAt: createdAt && createdAt.toDate ? createdAt.toDate().getTime() : (createdAt || null),
+      expiresAt: expiresAt && expiresAt.toDate ? expiresAt.toDate().getTime() : (expiresAt || null),
+      at: Date.now()
+    }));
+  } catch (e) { console.warn('菜單快取失敗:', e && e.message); }
+}
+
+function loadCachedMenu(code) {
+  try {
+    var raw = localStorage.getItem(MENU_CACHE_PREFIX + code);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+// 擋住畫面：停用／到期／離線逾時／首次未開通
+function showLicenseBlock(reason) {
+  var msgs = {
+    disabled:      { msg: '此店家已停用', hint: '請聯繫管理員恢復授權' },
+    expired:       { msg: '授權已到期', hint: '請聯繫管理員續約' },
+    notfound:      { msg: '找不到這份菜單', hint: '請確認網址是否正確，或請店家重新提供連結' },
+    nolicense:     { msg: '需要連線才能開通', hint: '第一次使用（或本機資料被清除）必須先連線一次' },
+    nocache:       { msg: '本機沒有可用的菜單', hint: '請連上網路後再開一次這個網址' },
+    lease_expired: { msg: '已離線超過 ' + OFFLINE_GRACE_DAYS + ' 天', hint: '請連上網路以繼續使用' },
+    clock_back:    { msg: '系統時間異常', hint: '偵測到裝置時間被往回調整，請連線後再試，並校正系統時間' }
+  };
+  var info = msgs[reason] || { msg: '目前無法使用', hint: '請連上網路後再試' };
+  document.getElementById('blockedMsg').textContent = info.msg;
+  document.getElementById('blockedHint').textContent = info.hint;
+  document.getElementById('blockedRetry').onclick = function() { location.reload(); };
+  document.title = info.msg;
+  showView('viewBlocked');
+}
 
 // ================================================================
 // STATE
@@ -1815,64 +1941,119 @@ function generateShortUrl(customCode) {
 }
 
 // Load config from short code (?s=xxx)
+// 線上：讀菜單 + 店家授權主檔 → 打卡、發離線通行證 → 進計算機
+// 離線：本機菜單快取 + 檢查離線通行證（見 授權系統變更文件.md 第 12 節）
 function loadConfigFromShortCode(code) {
   showToast('正在載入共享菜單…', 'info');
+  if (navigator.onLine === false) { loadConsumerOffline(code); return; }
   fdb.collection('mpc-shortlinks').doc(code).get().then(function(doc) {
-    if (!doc.exists) {
-      showToast('找不到此短網址的資料', 'error');
+    if (!doc.exists) { showLicenseBlock('notfound'); return; }
+    var data = doc.data();
+    var customCode = data.customCode || '';
+    if (!customCode) {
+      // 舊連結：沒有對應的店家主檔，維持舊行為（只看網址本身的有效期）
+      var legacyExpiry = data.expiresAt ? (data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt)) : null;
+      if (legacyExpiry && Date.now() > legacyExpiry.getTime()) { showLicenseBlock('expired'); return; }
+      applyConsumerMenu(buildShortlinkConfig(data), code, data);
       return;
     }
-    var data = doc.data();
-    // Check if expired
-    if (data.expiresAt) {
-      var expiresAt = data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
-      if (Date.now() > expiresAt.getTime()) {
-        showToast('授權已到期，請聯繫管理員續約', 'error');
-        setTimeout(function() { showView('viewHome'); }, 1500);
-        return;
-      }
-    }
-    var cfg = {
-      title: data.title || '',
-      subtitle: data.subtitle || '',
-      footer: data.footer || '',
-      totalLabel: data.totalLabel || '總金額',
-      resetText: data.resetText || '全部歸零',
-      emptyText: data.emptyText || '還沒有點餐喔',
-      currency: data.currency || '$',
-      layout: data.layout || 'list',
-      colors: data.colors || DEFAULT_CONFIG.colors,
-      items: data.items || []
-    };
-    cfg.customCode = data.customCode || '';
-    cfg.items.forEach(function(item) { if (!item.id) item.id = generateId(); });
-    saveConfig(cfg);
-    // Store expiry info for display
+    // 權威來源：店家授權主檔的 status / planExpiry
+    fdb.collection('mpc-store-codes').doc(customCode).get().then(function(storeDoc) {
+      if (!storeDoc.exists) { showLicenseBlock('disabled'); return; }
+      var sd = storeDoc.data();
+      if (sd.status === 'disabled') { showLicenseBlock('disabled'); return; }
+      var planExpiry = getPlanExpiry(sd);
+      if (planExpiry && Date.now() > planExpiry.getTime()) { showLicenseBlock('expired'); return; }
+      _firebasePassword = sd.password || '0000';
+      _forcePwChange = !!sd.forcePasswordChange;
+      // 菜單快取以「短網址 docId」為 key（離線時只拿得到 ?s= 的值，拿不到 customCode）
+      applyConsumerMenu(buildShortlinkConfig(data), code, data);
+      performCheckin(customCode, planExpiry);
+    }).catch(function(err) {
+      console.warn('讀取店家授權主檔失敗，改用離線授權:', err && err.message);
+      loadConsumerOffline(code);
+    });
+  }).catch(function(err) {
+    console.warn('讀取菜單失敗，改用離線快取:', err && err.message);
+    loadConsumerOffline(code);
+  });
+}
+
+// 由 shortlink 文件組出設定物件
+function buildShortlinkConfig(data) {
+  var cfg = {
+    title: data.title || '',
+    subtitle: data.subtitle || '',
+    footer: data.footer || '',
+    totalLabel: data.totalLabel || '總金額',
+    resetText: data.resetText || '全部歸零',
+    emptyText: data.emptyText || '還沒有點餐喔',
+    currency: data.currency || '$',
+    layout: data.layout || 'list',
+    colors: data.colors || DEFAULT_CONFIG.colors,
+    items: data.items || []
+  };
+  cfg.customCode = data.customCode || '';
+  cfg.items.forEach(function(item) { if (!item.id) item.id = generateId(); });
+  return cfg;
+}
+
+// 套用菜單並進計算機（線上／離線共用）
+function applyConsumerMenu(cfg, code, data) {
+  saveConfig(cfg);
+  if (data) {
     _linkCreatedAt = data.createdAt || null;
     _linkExpiresAt = data.expiresAt || null;
     _linkRandom = data.randomCode || '';
-    // Load password from Firestore (if exists), not stored in localStorage
-    if (data.customCode) {
-      fdb.collection('mpc-store-codes').doc(data.customCode).get().then(function(storeDoc) {
-        if (storeDoc.exists) {
-          _firebasePassword = storeDoc.data().password || '0000';
-          if (storeDoc.data().forcePasswordChange) {
-            _forcePwChange = true;
-          }
-        } else {
-          _firebasePassword = '0000';
-        }
-      }).catch(function() { _firebasePassword = '0000'; });
-    } else {
-      _firebasePassword = '0000';
-    }
-    resetQtys();
-    isConsumerMode = true;
-    showView('viewCalculator');
-    renderMainView();
+  }
+  cacheMenu(code, cfg, _linkRandom, _linkCreatedAt, _linkExpiresAt);
+  resetQtys();
+  isConsumerMode = true;
+  showView('viewCalculator');
+  renderMainView();
+}
+
+// 打卡：寫 lastSeenAt / openCount，並用「伺服器時間」當錨點發離線通行證
+function performCheckin(customCode, planExpiry) {
+  var expiryMs = planExpiry ? planExpiry.getTime() : null;
+  var ref = fdb.collection('mpc-store-codes').doc(customCode);
+  ref.update({
+    lastSeenAt: firebase.firestore.FieldValue.serverTimestamp(),
+    openCount: firebase.firestore.FieldValue.increment(1)
+  }).then(function() {
+    return ref.get();
+  }).then(function(snap) {
+    var sd = (snap && snap.data()) || {};
+    var anchor = (sd.lastSeenAt && sd.lastSeenAt.toDate) ? sd.lastSeenAt.toDate().getTime() : Date.now();
+    issueLicense(customCode, expiryMs, anchor);
+    console.log('[授權] 打卡完成，離線通行證已更新');
   }).catch(function(err) {
-    showToast('讀取失敗：' + err.message, 'error');
+    console.warn('打卡失敗（不影響使用）:', err && err.message);
+    issueLicense(customCode, expiryMs, 0);   // 打卡失敗仍發證，避免店家 30 天後被誤鎖
   });
+}
+
+// 離線：只用本機快取 + 離線通行證
+function loadConsumerOffline(code) {
+  var cached = loadCachedMenu(code);
+  if (!cached || !cached.cfg) { showLicenseBlock('nocache'); return; }
+  var customCode = cached.customCode || '';
+  if (customCode) {
+    var st = evaluateLicense(customCode);
+    if (!st.ok) { showLicenseBlock(st.reason); return; }
+    touchLicense();
+    _linkRandom = cached.randomCode || '';
+    _linkCreatedAt = cached.createdAt || null;
+    _linkExpiresAt = cached.expiresAt || null;
+    applyConsumerMenu(cached.cfg, code, null);
+    showToast('離線模式：授權還可用約 ' + st.daysLeft + ' 天，請記得連線', 'info');
+    return;
+  }
+  // 舊連結（無店家主檔）→ 不做離線授權檢查，維持舊行為
+  _linkRandom = cached.randomCode || '';
+  _linkCreatedAt = cached.createdAt || null;
+  _linkExpiresAt = cached.expiresAt || null;
+  applyConsumerMenu(cached.cfg, code, null);
 }
 
 function closeShareModal() {
@@ -2350,9 +2531,35 @@ function loadStoreCodes() {
         var rem = Math.ceil((pe.getTime() - now) / (24 * 60 * 60 * 1000));
         timeStr += rem > 0 ? '（剩 ' + rem + ' 天）' : '（已過期）';
       }
-      // Duration setting
+      // 狀態 / 最後上線 / 開啟次數
+      var isDisabled = d.status === 'disabled';
+      var statusStr = isDisabled
+        ? '<span style="color:#c0392b;font-weight:600;font-size:11px">⏸ 已停用</span>'
+        : '<span style="color:#2e8b57;font-weight:600;font-size:11px">▶ 啟用中</span>';
+      var seenStr = '從未上線';
+      if (d.lastSeenAt) {
+        var ls = d.lastSeenAt.toDate ? d.lastSeenAt.toDate() : new Date(d.lastSeenAt);
+        var ago = Math.floor((now - ls.getTime()) / DAY_MS);
+        seenStr = fmtDate(ls) + '（' + (ago <= 0 ? '今天' : ago + ' 天前') + '）';
+      }
+      var openStr = (d.openCount || 0) + ' 次';
       var durStr = '到期：' + (pe === null ? '永久' : fmtDate(pe));
-      row.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span><span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span><button class="del-store-btn" data-id="' + doc.id + '" style="margin-left:auto;background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button></div>' + (timeStr ? '<div style="font-size:11px;color:#888;margin-top:2px;padding-left:4px">' + timeStr + '</div>' : '') + '<div style="font-size:11px;color:#888;margin-top:1px;padding-left:4px"><span class="edit-dur-btn" data-id="' + doc.id + '" style="cursor:pointer;border-bottom:1px dashed #aaa">' + durStr + ' ✏️</span></div>';
+      row.innerHTML =
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span style="font-weight:600;color:var(--accent,#8aa84a);font-family:monospace">' + doc.id + '</span>' +
+          '<span>' + escapeHtml(d.shopName || '') + ' <span style="color:#bbb;font-size:11px">pw:' + escapeHtml(d.password || '0000') + '</span></span>' +
+          '<span style="margin-left:auto">' + statusStr + '</span>' +
+          '<button class="del-store-btn" data-id="' + doc.id + '" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px">✕</button>' +
+        '</div>' +
+        (timeStr ? '<div style="font-size:11px;color:#888;margin-top:2px;padding-left:4px">' + timeStr + '</div>' : '') +
+        '<div style="font-size:11px;color:#888;margin-top:1px;padding-left:4px">' +
+          '<span class="edit-dur-btn" data-id="' + doc.id + '" style="cursor:pointer;border-bottom:1px dashed #aaa">' + durStr + ' ✏️</span>' +
+          ' ｜ 👁 最後上線：' + seenStr +
+          ' ｜ 🔓 開啟：' + openStr +
+        '</div>' +
+        '<div style="font-size:11px;margin-top:2px;padding-left:4px">' +
+          '<span class="toggle-store-btn" data-id="' + doc.id + '" data-disabled="' + (isDisabled ? '1' : '0') + '" style="cursor:pointer;color:' + (isDisabled ? '#2e8b57' : '#c0392b') + ';border-bottom:1px dashed #aaa">' + (isDisabled ? '✅ 啟用' : '⏸ 停用') + '</span>' +
+        '</div>';
       list.appendChild(row);
       row.querySelector('.edit-dur-btn').addEventListener('click', function() {
         var sid = this.dataset.id;
@@ -2373,7 +2580,17 @@ function loadStoreCodes() {
         var base = (cur && cur.getTime() > Date.now()) ? cur.getTime() : Date.now();
         applyPlanExpiry(sid, new Date(base + addDays * 24 * 60 * 60 * 1000));
       });
-      list.appendChild(row);
+      row.querySelector('.toggle-store-btn').addEventListener('click', function() {
+        var sid = this.dataset.id;
+        var toDisabled = this.dataset.disabled === '0';
+        if (!confirm(toDisabled
+          ? '確定停用「' + doc.id + '」？店家下次連網就會被擋下。'
+          : '確定啟用「' + doc.id + '」？')) return;
+        fdb.collection('mpc-store-codes').doc(sid).update({ status: toDisabled ? 'disabled' : 'active' }).then(function() {
+          showToast(toDisabled ? '已停用（店家下次連網即失效）' : '已啟用', 'success');
+          loadStoreCodes();
+        }).catch(function(err) { showToast('更新失敗：' + err.message, 'error'); });
+      });
       row.querySelector('.del-store-btn').addEventListener('click', function() {
         if (confirm('確定刪除序號「' + doc.id + '」？\n已分享給客人的網址也會一起失效，無法復原。')) {
           fdb.collection('mpc-shortlinks').where('customCode', '==', doc.id).get().then(function(snap) {
@@ -2407,7 +2624,9 @@ document.getElementById('addStoreBtn').addEventListener('click', function() {
   var storeData = {
     shopName: name,
     password: pw,
-    linkDurationDays: dur,
+    status: 'active',
+    openCount: 0,
+    lastSeenAt: null,
     forcePasswordChange: true,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
@@ -2895,6 +3114,15 @@ document.getElementById('shareOverlay').addEventListener('click', function(e) {
 document.getElementById('orderDetailOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeOrderDetail();
 });
+
+// Service Worker：讓斷網時也能開啟頁面（離線租期的前提）
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(err) {
+      console.warn('Service Worker 註冊失敗:', err && err.message);
+    });
+  });
+}
 
 // ================================================================
 // INIT
