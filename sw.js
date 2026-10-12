@@ -9,7 +9,7 @@
  * 改版時只要改下面的 CACHE_NAME（例如 mpc-cache-v2），
  * 舊快取會在 activate 時自動清掉。
  */
-const CACHE_NAME = 'mpc-cache-v1';
+const CACHE_NAME = 'mpc-cache-v2';
 
 const SHELL = [
   './',

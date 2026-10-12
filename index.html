@@ -1265,6 +1265,15 @@ function loadCachedMenu(code) {
   } catch (e) { return null; }
 }
 
+// 店家密碼快取：離線時點標題 5 下才能解鎖（連網讀到密碼時順手存一份）
+var PW_CACHE_PREFIX = 'mpc-pw-';
+function cachePw(customCode, pw) {
+  try { if (customCode) localStorage.setItem(PW_CACHE_PREFIX + customCode, pw || ''); } catch (e) {}
+}
+function readCachedPw(customCode) {
+  try { return customCode ? (localStorage.getItem(PW_CACHE_PREFIX + customCode) || '') : ''; } catch (e) { return ''; }
+}
+
 // 擋住畫面：停用／到期／離線逾時／首次未開通
 function showLicenseBlock(reason) {
   var msgs = {
@@ -1965,6 +1974,7 @@ function loadConfigFromShortCode(code) {
       var planExpiry = getPlanExpiry(sd);
       if (planExpiry && Date.now() > planExpiry.getTime()) { showLicenseBlock('expired'); return; }
       _firebasePassword = sd.password || '0000';
+      cachePw(customCode, _firebasePassword);
       _forcePwChange = !!sd.forcePasswordChange;
       // 菜單快取以「短網址 docId」為 key（離線時只拿得到 ?s= 的值，拿不到 customCode）
       applyConsumerMenu(buildShortlinkConfig(data), code, data);
@@ -2042,6 +2052,7 @@ function loadConsumerOffline(code) {
     var st = evaluateLicense(customCode);
     if (!st.ok) { showLicenseBlock(st.reason); return; }
     touchLicense();
+    _firebasePassword = readCachedPw(customCode) || '';
     _linkRandom = cached.randomCode || '';
     _linkCreatedAt = cached.createdAt || null;
     _linkExpiresAt = cached.expiresAt || null;
@@ -2103,6 +2114,7 @@ function handleForcePwChange() {
     forcePasswordChange: false
   }).then(function() {
     _firebasePassword = newPw.trim();
+    cachePw(customCode, newPw.trim());
     _forcePwChange = false;
     showToast('密碼已更新', 'success');
   }).catch(function(err) {
@@ -3074,6 +3086,7 @@ document.getElementById('changeShopPwBtn').addEventListener('click', function() 
     forcePasswordChange: false
   }).then(function() {
     _firebasePassword = newPw;
+    cachePw(customCode, newPw);
     _forcePwChange = false;
     input.value = '';
     showToast('雲端密碼已更新', 'success');
