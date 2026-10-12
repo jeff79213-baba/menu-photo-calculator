@@ -3157,7 +3157,12 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   if (shortCode) {
     document.title = '載入共享菜單…';
     showView('viewCalculator');
-    _authReady.then(function() { loadConfigFromShortCode(shortCode); });
+    if (navigator.onLine === false) {
+      // 離線不需要登入，直接讀本機通行證，避免等匿名登入 timeout（約 10 秒）
+      loadConfigFromShortCode(shortCode);
+    } else {
+      _authReady.then(function() { loadConfigFromShortCode(shortCode); });
+    }
     return;
   }
 
